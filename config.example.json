@@ -1,0 +1,10 @@
+{
+  "telegram_token": "your_telegram_token_here",
+  "gigachat_token": "your_gigachat_token_here",
+  "sber_auth_key": "your_sber_auth_key_here",
+  "db_host": "localhost",
+  "db_port": 5432,
+  "db_user": "user",
+  "db_password": "password",
+  "db_name": "meeting_notes"
+}
