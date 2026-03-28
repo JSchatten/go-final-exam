@@ -1,0 +1,55 @@
+-- 1. Пользователи Telegram
+CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    telegram_id BIGINT UNIQUE NOT NULL,
+    username VARCHAR(255),
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Встречи (аудиофайлы, загруженные пользователями)
+CREATE TABLE meetings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    title VARCHAR(512) DEFAULT 'Meeting',
+    audio_file_path TEXT,        -- путь или URL к сохранённому файлу
+    status VARCHAR(50) DEFAULT 'uploaded', -- uploaded, processing, completed, failed
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    transcription_id UUID,
+    summary_id UUID
+);
+
+-- 3. Транскрипция (результат SaluteSpeech)
+CREATE TABLE transcriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    meeting_id UUID REFERENCES meetings(id) ON DELETE CASCADE,
+    full_text TEXT NOT NULL,
+    processed_at TIMESTAMPTZ DEFAULT NOW(),
+);
+
+-- 4. Краткое содержание (результат GigaChat)
+CREATE TABLE summaries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    meeting_id UUID REFERENCES meetings(id) ON DELETE CASCADE,
+    summary_text TEXT NOT NULL,
+    generated_at TIMESTAMPTZ DEFAULT NOW(),
+);
+
+-- 5. История взаимодействий с GigaChat (команда /chat)
+CREATE TABLE chat_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    query_text TEXT NOT NULL,
+    response_text TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Для быстрого доступа к данным пользователя
+-- CREATE INDEX idx_meetings_user_id ON meetings(user_id);
+-- CREATE INDEX idx_meetings_created ON meetings(created_at);
+
+-- -- Для истории чата
+-- CREATE INDEX idx_chat_user_id ON chat_history(user_id);
+-- CREATE INDEX idx_chat_created ON chat_history(created_at);

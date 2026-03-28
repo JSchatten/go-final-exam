@@ -1,0 +1,14 @@
+{
+  "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN",
+  "gigachat_client_id": "YOUR_GIGACHAT_CLIENT_ID",
+  "gigachat_scope": "GIGACHAT_API_PERS",
+  "gigachat_auth_key": "YOUR_GIGACHAT_AUTHORIZATION_KEY",
+  "salutespeech_client_id": "YOUR_SALUTESPEECH_CLIENT_ID",
+  "salutespeech_scope": "SALUTESPEECH_LONG_TRANSCRIBE",
+  "salutespeech_auth_key": "YOUR_SALUTESPEECH_AUTHORIZATION_KEY",
+  "db_host": "localhost",
+  "db_port": 5678,
+  "db_user": "postgres",
+  "db_password": "admin54321",
+  "db_name": "postgres"
+}
