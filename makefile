@@ -71,12 +71,26 @@ test_coverage: recreate_coverage_dir
 	echo "Coverage report generated: $(COVERAGE_HTML)"
 
 
-# Тесты
-test_integration:
-	go test -v -tags=integration ./...
+# Запуск интеграционных тестов для SaluteSpeech
+test_salutespeech:
+	echo "Running SaluteSpeech integration tests..."
+	go test -v -tags=salutespeech ./...
+
+# Запуск интеграционных тестов для GigaChat
+test_gigachat:
+	echo "Running GigaChat integration tests..."
+	go test -v -tags=gigachat ./...
+
+# Запуск всех интеграционных тестов (оба тега)
+test_integration: test_salutespeech test_gigachat
 
 test_local:
 	go test -v ./...
 
 test_all: test_local test_integration
 	echo "AllTested"
+
+# Только GigaChat
+#go test -v -tags=gigachat ./internal/integration/gigachat_integration_test.go
+# Только Салют
+#go test -v -tags=salutespeech ./internal/integration/salutespeech_integration_test.go
