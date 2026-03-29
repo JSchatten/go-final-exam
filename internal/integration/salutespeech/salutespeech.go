@@ -1,41 +1,92 @@
+// internal/integration/salutespeech/salutespeech.go
+
 package salutespeech
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/JSchatten/go-final-exam/internal/sberoath2"
 )
 
-// internal/integration/salutespeech.go
-
+// SaluteSpeechClient управляет взаимодействием с Sber SaluteSpeech API
 type SaluteSpeechClient struct {
 	oauthClient *sberoath2.OAuth2Client
 	BaseURL     string
+	HTTPClient  *http.Client
 }
 
+// NewSaluteSpeechClient создаёт новый клиент
 func NewSaluteSpeechClient(oauthClient *sberoath2.OAuth2Client) *SaluteSpeechClient {
 	return &SaluteSpeechClient{
 		oauthClient: oauthClient,
 		BaseURL:     "https://smartspeech.sber.ru/rest/v1",
+		HTTPClient:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-func (c *SaluteSpeechClient) UploadFile(fileURL string) (string, error) {
+// UploadFileByPath загружает локальный аудиофайл напрямую
+func (c *SaluteSpeechClient) UploadFileByPath(filePath string) (string, error) {
+	audioData, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read audio file: %w", err)
+	}
+
 	accessToken, err := c.oauthClient.GetToken()
 	if err != nil {
 		return "", fmt.Errorf("failed to get access token: %w", err)
 	}
 
-	body := url.Values{}
-	body.Set("url", fileURL)
+	req, err := http.NewRequest("POST", c.BaseURL+"/data:upload", bytes.NewReader(audioData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create upload request: %w", err)
+	}
 
-	req, err := http.NewRequest("POST", c.BaseURL+"/data:upload", strings.NewReader(body.Encode()))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "audio/wav") // Предполагаем WAV; можно параметризовать
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send upload request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read upload response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var uploadResp UploadResponse
+	if err := json.Unmarshal(body, &uploadResp); err != nil {
+		return "", fmt.Errorf("failed to unmarshal upload response: %w", err)
+	}
+
+	return uploadResp.Result.RequestFileID, nil
+}
+
+// UploadFileByUrl загружает файл по внешнему URL
+func (c *SaluteSpeechClient) UploadFileByUrl(fileURL string) (string, error) {
+	accessToken, err := c.oauthClient.GetToken()
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+
+	data := url.Values{}
+	data.Set("url", fileURL)
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/data:upload", strings.NewReader(data.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -44,24 +95,23 @@ func (c *SaluteSpeechClient) UploadFile(fileURL string) (string, error) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var uploadResp UploadResponse
-	err = json.Unmarshal(respBody, &uploadResp)
+	err = json.Unmarshal(body, &uploadResp)
 	if err != nil {
 		return "", fmt.Errorf("failed to unmarshal upload response: %w", err)
 	}
@@ -69,6 +119,7 @@ func (c *SaluteSpeechClient) UploadFile(fileURL string) (string, error) {
 	return uploadResp.Result.RequestFileID, nil
 }
 
+// CreateRecognitionTask создаёт задачу на распознавание
 func (c *SaluteSpeechClient) CreateRecognitionTask(audioId string) (string, error) {
 	body := map[string]interface{}{
 		"options": map[string]interface{}{
@@ -92,12 +143,7 @@ func (c *SaluteSpeechClient) CreateRecognitionTask(audioId string) (string, erro
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", c.BaseURL+"/speech:async_recognize", strings.NewReader(string(jsonBody)))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to marshal task body: %w", err)
 	}
 
 	accessToken, err := c.oauthClient.GetToken()
@@ -105,12 +151,16 @@ func (c *SaluteSpeechClient) CreateRecognitionTask(audioId string) (string, erro
 		return "", fmt.Errorf("failed to get access token: %w", err)
 	}
 
+	req, err := http.NewRequest("POST", c.BaseURL+"/speech:async_recognize", bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
@@ -131,125 +181,111 @@ func (c *SaluteSpeechClient) CreateRecognitionTask(audioId string) (string, erro
 		return "", fmt.Errorf("failed to unmarshal task response: %w", err)
 	}
 
+	if taskResp.Status != 200 {
+		return "", fmt.Errorf("API returned error status: %d", taskResp.Status)
+	}
+
 	return taskResp.Result.ID, nil
 }
 
-func (c *SaluteSpeechClient) CheckTaskStatus(taskId string) (string, error) {
-	// Новый endpoint: /task:get с параметром id
+// CheckTaskStatus проверяет статус задачи и возвращает полный объект TaskResult
+func (c *SaluteSpeechClient) CheckTaskStatus(taskId string) (*TaskResult, error) {
 	url := fmt.Sprintf("%s/task:get?id=%s", c.BaseURL, taskId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	accessToken, err := c.oauthClient.GetToken()
 	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
+		return nil, fmt.Errorf("failed to get access token: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
 
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status check failed with status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("status check failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var statusResp map[string]string
-	err = json.Unmarshal(respBody, &statusResp)
+	var statusResp AsyncTaskResponse
+	err = json.Unmarshal(body, &statusResp)
 	if err != nil {
-		return "", fmt.Errorf("failed to unmarshal status response: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal status response: %w", err)
 	}
 
-	return statusResp["status"], nil
+	if statusResp.Status != 200 {
+		return nil, fmt.Errorf("API returned error status: %d", statusResp.Status)
+	}
+
+	return &statusResp.Result, nil
 }
 
-func (c *SaluteSpeechClient) GetRecognitionResult(taskId string) (string, error) {
-	url := fmt.Sprintf("%s/data:download?response_file_id=%s", c.BaseURL, taskId)
+// GetRecognitionResult получает результат по ResponseFileID
+func (c *SaluteSpeechClient) GetRecognitionResult(responseFileID string) (RecognitionResponse, error) {
+	url := fmt.Sprintf("%s/data:download?response_file_id=%s", c.BaseURL, responseFileID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	accessToken, err := c.oauthClient.GetToken()
 	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
+		return nil, fmt.Errorf("failed to get access token: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/octet-stream")
 
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("get result failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("get result failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	resultBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read result body: %w", err)
+		return nil, fmt.Errorf("failed to read result body: %w", err)
 	}
 
-	return string(resultBytes), nil
-}
-
-// RecognizeSpeech performs full speech recognition workflow
-func (c *SaluteSpeechClient) RecognizeSpeech(fileURL string) (string, error) {
-	// Step 1: Upload file
-	audioId, err := c.UploadFile(fileURL)
-	if err != nil {
-		return "", fmt.Errorf("failed to upload file: %w", err)
+	// Результат — массив сегментов, каждый содержит `results`
+	var segments []struct {
+		Results []RecognitionResult `json:"results"`
+	}
+	if err := json.Unmarshal(resultBytes, &segments); err != nil {
+		return nil, fmt.Errorf("failed to parse recognition JSON: %w", err)
 	}
 
-	// Step 2: Create recognition task
-	taskId, err := c.CreateRecognitionTask(audioId)
-	if err != nil {
-		return "", fmt.Errorf("failed to create recognition task: %w", err)
-	}
-
-	// Step 3: Poll for task completion
-	pollInterval := 5 * time.Second
-	for {
-		status, err := c.CheckTaskStatus(taskId)
-		if err != nil {
-			return "", fmt.Errorf("failed to check task status: %w", err)
+	var recognitionResults RecognitionResponse
+	for _, seg := range segments {
+		for _, res := range seg.Results {
+			if res.Text != "" || res.NormalizedText != "" {
+				recognitionResults = append(recognitionResults, res)
+			}
 		}
-
-		if status == "DONE" {
-			break
-		}
-
-		if status == "ERROR" {
-			return "", fmt.Errorf("recognition task failed")
-		}
-
-		time.Sleep(pollInterval)
 	}
 
-	// Step 4: Get recognition result
-	result, err := c.GetRecognitionResult(taskId)
-	if err != nil {
-		return "", fmt.Errorf("failed to get recognition result: %w", err)
+	if len(recognitionResults) == 0 {
+		return nil, fmt.Errorf("recognition result is empty")
 	}
 
-	return result, nil
+	return recognitionResults, nil
 }

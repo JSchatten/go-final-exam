@@ -176,7 +176,7 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 	var taskStatusResp AsyncTaskResponse
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		// Ждём 5 секунд перед каждой попыткой (кроме первой)
+		// Ждём 4 секунд перед каждой попыткой (кроме первой)
 		if attempt > 0 {
 			time.Sleep(5 * time.Second)
 		}
@@ -227,7 +227,7 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 
 	t.Logf("Task completed successfully with status: %s", finalStatus)
 
-	// --- Шаг 4: Получение результата ---
+	// --- Шаг 5: Получение результата ---
 	resultURL := fmt.Sprintf("https://smartspeech.sber.ru/rest/v1/data:download?response_file_id=%s", taskStatusResp.Result.ResponseFileID)
 	req, err = http.NewRequest("GET", resultURL, nil)
 	require.NoError(t, err)
