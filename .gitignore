@@ -81,3 +81,6 @@ tmp/
 go_test/
 # Docs
 docs/
+
+# audiostorage
+audio/*
