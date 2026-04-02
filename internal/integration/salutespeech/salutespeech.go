@@ -25,12 +25,29 @@ type SaluteSpeechClient struct {
 }
 
 // NewSaluteSpeechClient создаёт новый клиент
-func NewSaluteSpeechClient(oauthClient *sberoath2.OAuth2Client) *SaluteSpeechClient {
+func NewSaluteSpeechClient(cfg *Config) (*SaluteSpeechClient, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("salutespeech config is required")
+	}
+
+	oauthClient, err := sberoath2.NewOAuth2Client(
+		cfg.ClientID,
+		cfg.AuthKey,
+		cfg.Scope,
+		"https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+		nil, // использовать дефолтный RqUID генератор
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OAuth2 client for SaluteSpeech: %w", err)
+	}
+
 	return &SaluteSpeechClient{
 		oauthClient: oauthClient,
-		BaseURL:     "https://smartspeech.sber.ru/rest/v1",
-		HTTPClient:  &http.Client{Timeout: 30 * time.Second},
-	}
+		BaseURL:     "https://smartspeech.sber.ru/rest",
+		HTTPClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}, nil
 }
 
 // UploadFileByPath загружает локальный аудиофайл напрямую
@@ -136,9 +153,9 @@ func (c *SaluteSpeechClient) CreateRecognitionTask(audioId string) (string, erro
 			"language":                "ru-RU",
 			"enable_profanity_filter": true,
 			"hypotheses_count":        1,
-			"no_speech_timeout":       2,
-			"max_speech_timeout":      2,
-			"channels_count":          1,
+			// "no_speech_timeout":       2,
+			// "max_speech_timeout":      2,
+			"channels_count": 1,
 			"speaker_separation_options": map[string]interface{}{
 				"enable":                   false,
 				"enable_only_main_speaker": false,

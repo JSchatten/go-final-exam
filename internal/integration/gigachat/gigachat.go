@@ -17,15 +17,31 @@ type GigaChatClient struct {
 	HTTPClient  *http.Client
 }
 
-// NewGigaChatClient creates a new GigaChat client
-func NewGigaChatClient(oauthClient *sberoath2.OAuth2Client) *GigaChatClient {
+// NewGigaChatClient creates a new GigaChat client using Config
+func NewGigaChatClient(cfg *Config) (*GigaChatClient, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("gigachat config is required")
+	}
+
+	oauthClient, err := sberoath2.NewOAuth2Client(
+		cfg.ClientID,
+		cfg.AuthKey,
+		"GIGACHAT_API_PERS",
+		"https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+		nil,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create oauth client: %w", err)
+	}
+
 	return &GigaChatClient{
 		oauthClient: oauthClient,
 		BaseURL:     BaseURL,
 		HTTPClient: &http.Client{
 			Timeout: HTTPTimeout,
 		},
-	}
+	}, nil
 }
 
 // SendMessage sends a message to GigaChat and returns the assistant's reply

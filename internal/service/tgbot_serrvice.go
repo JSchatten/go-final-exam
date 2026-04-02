@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -13,81 +12,55 @@ import (
 
 	"gopkg.in/telebot.v3"
 
-	"github.com/JSchatten/go-final-exam/internal/config"
 	"github.com/JSchatten/go-final-exam/internal/integration/gigachat"
+	"github.com/JSchatten/go-final-exam/internal/integration/salutespeech"
 	"github.com/JSchatten/go-final-exam/internal/repository"
 )
 
 // Bot представляет Telegram-бота и его зависимости.
 type Bot struct {
 	Telebot          *telebot.Bot
-	Config           *config.Config
 	GigaChat         *gigachat.GigaChatClient
+	SaluteSpeech     *salutespeech.SaluteSpeechClient
 	DB               *repository.DB
 	AudioStoragePath string
 }
 
-// NewBot создаёт новый экземпляр бота.
-func NewBot(cfg *config.Config, gigaChat *gigachat.GigaChatClient, db *repository.DB) (*Bot, error) {
-	settings := telebot.Settings{
-		Token:  cfg.TelegramToken,
-		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
-	}
-
-	bot, err := telebot.NewBot(settings)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bot: %w", err)
-	}
-
+// NewBot создаёт новый экземпляр бота с готовыми зависимостями
+func NewBot(
+	bot *telebot.Bot,
+	gigaChat *gigachat.GigaChatClient,
+	saluteSpeech *salutespeech.SaluteSpeechClient,
+	db *repository.DB,
+	audioStoragePath string,
+) *Bot {
 	return &Bot{
 		Telebot:          bot,
-		Config:           cfg,
 		GigaChat:         gigaChat,
+		SaluteSpeech:     saluteSpeech,
 		DB:               db,
-		AudioStoragePath: cfg.AudioStoragePath,
-	}, nil
+		AudioStoragePath: audioStoragePath,
+	}
 }
 
-// Start запускает бота и настраивает обработчики команд и сообщений.
-func (b *Bot) Start() {
-	b.Telebot.Handle("/start", b.handleStart)
-	b.Telebot.Handle("/list", b.handleList)
-	b.Telebot.Handle("/get", b.handleGet)
-	b.Telebot.Handle("/find", b.handleFind)
-	b.Telebot.Handle("/chat", b.handleChat)
-	b.Telebot.Handle(telebot.OnVoice, b.handleVoice)
-	b.Telebot.Handle(telebot.OnAudio, b.handleAudio)
-	b.Telebot.Handle(telebot.OnText, b.handleText)
-
-	log.Println("Bot is starting...")
-	b.Telebot.Start()
-}
-
-// Stop останавливает бота.
-func (b *Bot) Stop() {
-	b.Telebot.Stop()
-	log.Println("Bot stopped")
-}
-
-// handleStart обрабатывает команду /start.
-func (b *Bot) handleStart(c telebot.Context) error {
+// HandleStart обрабатывает команду /start.
+func (b *Bot) HandleStart(c telebot.Context) error {
 	user := c.Sender()
-	fmt.Println(user.ID)
 	return c.Send(fmt.Sprintf("Привет, %s! Ты успешно зарегистрирован.", user.FirstName))
 }
 
-// handleList обрабатывает команду /list.
-func (b *Bot) handleList(c telebot.Context) error {
+// HandleList обрабатывает команду /list.
+func (b *Bot) HandleList(c telebot.Context) error {
 	return c.Send("Список встреч: (пока не реализовано)")
 }
 
-// handleGet обрабатывает команду /get.
-func (b *Bot) handleGet(c telebot.Context) error {
+// HandleGet обрабатывает команду /get.
+func (b *Bot) HandleGet(c telebot.Context) error {
 	return c.Send("Получение текста встречи: (пока не реализовано)")
 }
 
-// handleFind обрабатывает команду /find.
-func (b *Bot) handleFind(c telebot.Context) error {
+// HandleFind обрабатывает команду /find.
+func (b *Bot) HandleFind(c telebot.Context) error {
 	query := c.Text()[6:]
 	if strings.Trim(query, " ") == "" {
 		return c.Send("Укажите ключевые слова для поиска. Пример: /find проект")
@@ -95,17 +68,22 @@ func (b *Bot) handleFind(c telebot.Context) error {
 	return c.Send(fmt.Sprintf("Ищу встречи по запросу: %q (пока не реализовано)", query))
 }
 
-// handleChat обрабатывает команду /chat.
-func (b *Bot) handleChat(c telebot.Context) error {
+// HandleChat обрабатывает команду /chat.
+func (b *Bot) HandleChat(c telebot.Context) error {
 	prompt := c.Text()[6:]
 	if prompt == "" {
 		return c.Send("Напишите запрос после команды. Пример: /chat Как дела?")
 	}
-	return c.Send(fmt.Sprintf("Запрос к GigaChat: %q (пока не реализовано)", prompt))
+	response, err := b.GigaChat.SendMessage(prompt)
+	if err != nil {
+		log.Printf("Failed to get response from GigaChat: %v", err)
+		return c.Send("Не удалось получить ответ от GigaChat.")
+	}
+	return c.Send(response)
 }
 
-// handleVoice обрабатывает голосовые сообщения.
-func (b *Bot) handleVoice(c telebot.Context) error {
+// HandleVoice обрабатывает голосовые сообщения.
+func (b *Bot) HandleVoice(c telebot.Context) error {
 	voice := c.Message().Voice
 	user := c.Sender()
 
@@ -132,7 +110,7 @@ func (b *Bot) handleVoice(c telebot.Context) error {
 	}
 	defer outFile.Close()
 
-	fileURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", b.Config.TelegramToken, file.FilePath)
+	fileURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", b.Telebot.Token, file.FilePath)
 
 	resp, err := http.Get(fileURL)
 	if err != nil {
@@ -157,8 +135,8 @@ func (b *Bot) handleVoice(c telebot.Context) error {
 	return c.Send("Голосовое сообщение получено. Обрабатываю... (распознавание речи пока не реализовано)")
 }
 
-// handleAudio обрабатывает аудиофайлы.
-func (b *Bot) handleAudio(c telebot.Context) error {
+// HandleAudio обрабатывает аудиофайлы.
+func (b *Bot) HandleAudio(c telebot.Context) error {
 	transcript := "[Транскрипция аудиофайла будет здесь]"
 
 	summaryPrompt := fmt.Sprintf("Сделай краткую выжимку из следующего текста:\n\n%s", transcript)
@@ -172,25 +150,8 @@ func (b *Bot) handleAudio(c telebot.Context) error {
 	return c.Send(result)
 }
 
-// handleText обрабатывает текстовые сообщения.
-func (b *Bot) handleText(c telebot.Context) error {
+// HandleText обрабатывает текстовые сообщения.
+func (b *Bot) HandleText(c telebot.Context) error {
 	text := c.Text()
 	return c.Send(fmt.Sprintf("Вы написали: %q (текст пока не обрабатывается)", text))
-}
-
-// RunBot запускает бота с поддержкой graceful shutdown через контекст.
-func RunBot(ctx context.Context, cfg *config.Config, gigaChat *gigachat.GigaChatClient, db *repository.DB) {
-	bot, err := NewBot(cfg, gigaChat, db)
-	if err != nil {
-		log.Fatalf("Failed to create bot: %v", err)
-	}
-
-	go func() {
-		bot.Start()
-	}()
-
-	<-ctx.Done()
-
-	log.Println("Shutting down bot...")
-	bot.Stop()
 }

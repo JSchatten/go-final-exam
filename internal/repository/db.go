@@ -17,8 +17,18 @@ type DB struct {
 	Conn *sql.DB
 }
 
-// InitDB initializes the database connection and runs migrations
-func InitDB(dataSourceName string) (*DB, error) {
+// InitDB initializes the database connection using Config and runs migrations
+func InitDB(cfg *Config) (*DB, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("database config is required")
+	}
+
+	// Формируем DSN из конфига
+	dataSourceName := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name,
+	)
+
 	// Открываем соединение через pgx (используя stdlib-обёртку)
 	conn, err := sql.Open("pgx", dataSourceName)
 	if err != nil {
@@ -40,7 +50,7 @@ func InitDB(dataSourceName string) (*DB, error) {
 
 	// Создаём мигратор
 	m, err := migrate.NewWithDatabaseInstance(
-		"file://migrations", // путь к папке с миграциями (от корня проекта)
+		"file://migrations", // путь к папке с миграциями
 		"postgres",
 		driver,
 	)

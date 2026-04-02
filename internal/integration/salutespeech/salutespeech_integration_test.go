@@ -35,7 +35,7 @@ func decodeAuthKey(authKey string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func loadTestConfig(t *testing.T) (string, string, string) {
+func loadTestConfig(t *testing.T) (string, string, string, string) {
 	err := godotenv.Load("../../../.env") // Путь от internal/integration к корню
 	// err := godotenv.Load("../../.env") // Путь от internal/integration к корню
 	if err != nil {
@@ -55,17 +55,11 @@ func loadTestConfig(t *testing.T) (string, string, string) {
 	clientID, clientSecret, err := decodeAuthKey(authKey)
 	require.NoError(t, err, "Failed to decode SALUTESPEECH_AUTHORIZATION_KEY")
 
-	return clientID, clientSecret, scope
+	return clientID, clientSecret, authKey, scope
 }
-
-type TaskStatusResponse struct {
-	Status string `json:"status"`
-}
-
-// === Тест: Полный цикл распознавания через прямую загрузку ===
 
 func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
-	clientID, clientSecret, scope := loadTestConfig(t)
+	clientID, _, authKey, scope := loadTestConfig(t)
 
 	// 1. Читаем локальный файл
 	// filePath := "../../../test/шарлотка.wav"
@@ -75,20 +69,21 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 	require.Greater(t, len(audioData), 400, "Audio file must be larger than 400 bytes")
 
 	// 2. Получаем токен
-	oauthClient := sberoath2.NewOAuth2Client(
+	oauthClient, err := sberoath2.NewOAuth2Client(
 		clientID,
-		clientSecret,
+		authKey,
 		scope,
 		"https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
 		nil,
 	)
+	require.NoError(t, err)
 	token, err := oauthClient.GetToken()
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 
 	t.Log("Token obtained")
 
-	// --- Шаг 1: Прямая загрузка файла ---
+	// Шаг 1: Прямая загрузка файла
 	url := "https://smartspeech.sber.ru/rest/v1/data:upload"
 	req, err := http.NewRequest("POST", url, bytes.NewReader(audioData))
 	require.NoError(t, err)
@@ -115,7 +110,7 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 
 	t.Logf("File uploaded. request_file_id: %s", requestFileID)
 
-	// --- Шаг 2: Создание задачи на распознавание ---
+	// Шаг 2: Создание задачи на распознавание
 	encoding, err := GetAudioOptions(filePath)
 	require.NoError(t, err)
 
@@ -173,7 +168,7 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 
 	t.Logf("Task created: ID=%s, Status=%s, Created=%v", taskID, taskStatus, createdAt)
 
-	// --- Шаг 3: Ожидание завершения задачи с ограничением по количеству попыток ---
+	// Шаг 3: Ожидание завершения задачи с ограничением по количеству попыток
 	t.Logf("Waiting for task %s to complete (polling every 5 seconds, max 5 attempts)", taskID)
 
 	maxAttempts := 5
@@ -232,7 +227,7 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 
 	t.Logf("Task completed successfully with status: %s", finalStatus)
 
-	// --- Шаг 5: Получение результата ---
+	// Шаг 5: Получение результата
 	resultURL := fmt.Sprintf("https://smartspeech.sber.ru/rest/v1/data:download?response_file_id=%s", taskStatusResp.Result.ResponseFileID)
 	req, err = http.NewRequest("GET", resultURL, nil)
 	require.NoError(t, err)

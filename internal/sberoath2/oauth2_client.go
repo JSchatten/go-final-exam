@@ -14,6 +14,20 @@ import (
 	"github.com/google/uuid"
 )
 
+func decodeAuthKey(authKey string) (clientID, clientSecret string, err error) {
+	decoded, err := base64.StdEncoding.DecodeString(authKey)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid base64 in AUTHORIZATION_KEY: %w", err)
+	}
+
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid format: expected client_id:client_secret")
+	}
+
+	return parts[0], parts[1], nil
+}
+
 // OAuth2Response описывает ответ от Sber OAuth2
 type OAuth2Response struct {
 	AccessToken string `json:"access_token"`
@@ -41,22 +55,31 @@ type RqUIDGenerator func() string
 
 // NewOAuth2Client создаёт новый клиент OAuth2
 func NewOAuth2Client(
-	clientID, clientSecret, scope, tokenURL string,
+	clientID, authKey, scope, tokenURL string,
 	rquidGen RqUIDGenerator,
-) *OAuth2Client {
+) (*OAuth2Client, error) {
 	if rquidGen == nil {
 		rquidGen = func() string {
 			return uuid.New().String()
 		}
 	}
 
+	decodedClientID, decodedClientSecret, err := decodeAuthKey(authKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode AUTHORIZATION_KEY: %w", err)
+	}
+
+	if decodedClientID != clientID {
+		return nil, fmt.Errorf("clientID mismatch: expected %s, got %s", clientID, decodedClientID)
+	}
+
 	return &OAuth2Client{
 		clientID:       clientID,
-		clientSecret:   clientSecret,
+		clientSecret:   decodedClientSecret,
 		scope:          scope,
 		tokenURL:       tokenURL,
 		rquidGenerator: rquidGen,
-	}
+	}, nil
 }
 
 // GetToken возвращает актуальный access_token (при необходимости обновляет)
