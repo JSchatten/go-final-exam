@@ -2,10 +2,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/JSchatten/go-final-exam/internal/config"
+	"github.com/JSchatten/go-final-exam/internal/integration"
 	"github.com/JSchatten/go-final-exam/internal/repository"
 )
 
@@ -35,7 +40,24 @@ func main() {
 	fmt.Printf("GigaChat GigaChatClientID: %s\n", cfg.GigaChatClientID)
 	fmt.Printf("Sber SaluteSpeechClientID: %s\n", cfg.SaluteSpeechClientID)
 	fmt.Printf("Database: %s@%s:%d/%s\n", cfg.DBUser, cfg.DBHost, cfg.DBPort, cfg.DBName)
+	fmt.Printf("Files path: %s\n", cfg.AudioStoragePath)
 
-	fmt.Println("Hello, Go! Application is running...")
-	// Здесь будет запуск бота и других сервисов
+	fmt.Println("Application is running...")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Перехватываем системные сигналы
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	go func() {
+		sig := <-c
+		log.Printf("Received signal: %s. Shutting down...\n", sig)
+		cancel() // Отменяем контекст → RunBot остановит бота
+	}()
+
+	// Запускаем бота с контекстом
+	integration.RunBot(ctx, cfg, nil, db)
+
+	log.Println("Application stopped gracefully.")
 }
