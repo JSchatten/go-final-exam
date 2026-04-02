@@ -10,8 +10,8 @@ import (
 	"syscall"
 
 	"github.com/JSchatten/go-final-exam/internal/config"
-	"github.com/JSchatten/go-final-exam/internal/integration"
 	"github.com/JSchatten/go-final-exam/internal/repository"
+	"github.com/JSchatten/go-final-exam/internal/service"
 )
 
 func main() {
@@ -34,30 +34,32 @@ func main() {
 	}
 	defer db.Close()
 
-	// Выводим только что загруженные токены (безопасно - в продакшене убрать)
+	// Выводим конфигурацию (для отладки)
 	fmt.Println("Configuration loaded:")
 	fmt.Printf("Telegram Token: %s\n", cfg.TelegramToken)
-	fmt.Printf("GigaChat GigaChatClientID: %s\n", cfg.GigaChatClientID)
-	fmt.Printf("Sber SaluteSpeechClientID: %s\n", cfg.SaluteSpeechClientID)
+	fmt.Printf("GigaChat ClientID: %s\n", cfg.GigaChatClientID)
+	fmt.Printf("Sber SaluteSpeech ClientID: %s\n", cfg.SaluteSpeechClientID)
 	fmt.Printf("Database: %s@%s:%d/%s\n", cfg.DBUser, cfg.DBHost, cfg.DBPort, cfg.DBName)
 	fmt.Printf("Files path: %s\n", cfg.AudioStoragePath)
 
 	fmt.Println("Application is running...")
 
+	// Создаём контекст для graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Перехватываем системные сигналы
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
-		sig := <-c
+		sig := <-quit
 		log.Printf("Received signal: %s. Shutting down...\n", sig)
-		cancel() // Отменяем контекст → RunBot остановит бота
+		cancel()
 	}()
 
-	// Запускаем бота с контекстом
-	integration.RunBot(ctx, cfg, nil, db)
+	// Запускаем бота через сервис
+	service.RunBot(ctx, cfg, nil, db)
 
-	log.Println("Application stopped gracefully.")
+	// После завершения RunBot (когда контекст отменён) — приложение корректно остановится
+	log.Println("Application stopped.")
 }
