@@ -10,5 +10,6 @@
   "db_port": 5678,
   "db_user": "postgres",
   "db_password": "admin54321",
-  "db_name": "postgres"
+  "db_name": "postgres",
+  "audio_storage_path": "./audio"
 }

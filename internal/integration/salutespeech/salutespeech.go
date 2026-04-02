@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -121,10 +122,16 @@ func (c *SaluteSpeechClient) UploadFileByUrl(fileURL string) (string, error) {
 
 // CreateRecognitionTask создаёт задачу на распознавание
 func (c *SaluteSpeechClient) CreateRecognitionTask(audioId string) (string, error) {
+	audioPath := filepath.Join("testdata", "test.wav")
+	encoding, err := GetAudioOptions(audioPath)
+	if err != nil {
+		return "", err
+	}
+
 	body := map[string]interface{}{
 		"options": map[string]interface{}{
 			"model":                   "general",
-			"audio_encoding":          "PCM_S16LE",
+			"audio_encoding":          encoding,
 			"sample_rate":             16000,
 			"language":                "ru-RU",
 			"enable_profanity_filter": true,
@@ -288,4 +295,28 @@ func (c *SaluteSpeechClient) GetRecognitionResult(responseFileID string) (Recogn
 	}
 
 	return recognitionResults, nil
+}
+
+// GetAudioOptions returns appropriate audio encoding, sample rate, and channels
+// based on file extension. It uses defaults if metadata is not available.
+func GetAudioOptions(filePath string) (encoding string, err error) {
+	ext := strings.ToLower(filepath.Ext(filePath))
+
+	switch ext {
+	case ".wav":
+		// Предполагаем стандартный PCM 16-bit LE
+		return "PCM_S16LE", nil
+
+	case ".mp3":
+		// MP3 поддерживается с разной частотой и каналами
+		return "MP3", nil
+
+	case ".ogg":
+		// Telegram отправляет .ogg с Opus — используем OGG_OPUS
+		// Требует 16000 или 48000 Hz, только моно
+		return "OPUS", nil
+
+	default:
+		return "", fmt.Errorf("unsupported audio format: %s", ext)
+	}
 }

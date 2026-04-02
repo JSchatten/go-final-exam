@@ -36,7 +36,8 @@ func decodeAuthKey(authKey string) (string, string, error) {
 }
 
 func loadTestConfig(t *testing.T) (string, string, string) {
-	err := godotenv.Load("../../.env") // Путь от internal/integration к корню
+	err := godotenv.Load("../../../.env") // Путь от internal/integration к корню
+	// err := godotenv.Load("../../.env") // Путь от internal/integration к корню
 	if err != nil {
 		t.Skip(".env file not found, skipping integration test")
 	}
@@ -67,7 +68,8 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 	clientID, clientSecret, scope := loadTestConfig(t)
 
 	// 1. Читаем локальный файл
-	filePath := "../../test/шарлотка.wav"
+	// filePath := "../../../test/шарлотка.wav"
+	filePath := "../../../test/шарлотка.ogg"
 	audioData, err := os.ReadFile(filePath)
 	require.NoError(t, err, "Failed to read audio file")
 	require.Greater(t, len(audioData), 400, "Audio file must be larger than 400 bytes")
@@ -114,11 +116,14 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 	t.Logf("File uploaded. request_file_id: %s", requestFileID)
 
 	// --- Шаг 2: Создание задачи на распознавание ---
+	encoding, err := GetAudioOptions(filePath)
+	require.NoError(t, err)
+
 	taskURL := "https://smartspeech.sber.ru/rest/v1/speech:async_recognize"
 	taskBody := map[string]interface{}{
 		"options": map[string]interface{}{
 			"model":                   "general",
-			"audio_encoding":          "PCM_S16LE",
+			"audio_encoding":          encoding,
 			"sample_rate":             16000,
 			"language":                "ru-RU",
 			"enable_profanity_filter": true,

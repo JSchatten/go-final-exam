@@ -30,6 +30,10 @@ type Config struct {
 	DBUser     string `json:"db_user"`
 	DBPassword string `json:"db_password"`
 	DBName     string `json:"db_name"`
+
+	// Files
+	AudioStoragePath string `json:"audio_storage_path"` // путь к папке для сохранения аудиофайлов
+
 }
 
 // LoadConfig loads configuration from file and command-line flags
@@ -53,12 +57,12 @@ func LoadConfig() (*Config, error) {
 
 	// Переопределение через переменные окружения (если заданы)
 
-	// === Telegram ===
+	// Telegram
 	if token := os.Getenv("TELEGRAM_TOKEN"); token != "" {
 		cfg.TelegramToken = token
 	}
 
-	// === GigaChat ===
+	// GigaChat
 	if v := os.Getenv("GIGACHAT_CLIENT_ID"); v != "" {
 		cfg.GigaChatClientID = v
 	}
@@ -69,7 +73,7 @@ func LoadConfig() (*Config, error) {
 		cfg.GigaChatAuthKey = v
 	}
 
-	// === SaluteSpeech ===
+	// SaluteSpeech
 	if v := os.Getenv("SALUTESPEECH_CLIENT_ID"); v != "" {
 		cfg.SaluteSpeechClientID = v
 	}
@@ -80,7 +84,7 @@ func LoadConfig() (*Config, error) {
 		cfg.SaluteSpeechAuthKey = v
 	}
 
-	// === Database ===
+	// Database
 	if v := os.Getenv("DBHOST"); v != "" {
 		cfg.DBHost = v
 	}
@@ -99,6 +103,12 @@ func LoadConfig() (*Config, error) {
 	}
 	if v := os.Getenv("DBNAME"); v != "" {
 		cfg.DBName = v
+	}
+
+	// Audio storage
+
+	if v := os.Getenv("AUDIO_STORAGE_PATH"); v != "" {
+		cfg.AudioStoragePath = v
 	}
 
 	return &cfg, nil
