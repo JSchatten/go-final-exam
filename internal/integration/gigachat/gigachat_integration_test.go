@@ -5,14 +5,10 @@ package gigachat
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/JSchatten/go-final-exam/internal/sberoath2"
 	"github.com/joho/godotenv"
@@ -33,69 +29,6 @@ func decodeAuthKey(authKey string) (clientID, clientSecret string, err error) {
 	}
 
 	return parts[0], parts[1], nil
-}
-
-// SendMessageWithSystemPrompt sends a message with a system prompt and user content
-func (c *GigaChatClient) SendMessageWithSystemPrompt(systemPrompt, userContent string) (string, error) {
-	accessToken, err := c.oauthClient.GetToken()
-	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
-	}
-
-	request := ChatRequest{
-		Model: "GigaChat",
-		Messages: []Message{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userContent},
-		},
-		Stream:            false,
-		RepetitionPenalty: 1.0,
-	}
-
-	body, err := json.Marshal(request)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", c.BaseURL+"/chat/completions", strings.NewReader(string(body)))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	httpClient := &http.Client{Timeout: 15 * time.Second}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp map[string]interface{}
-		_ = json.Unmarshal(respBody, &errResp)
-		errMsg, _ := errResp["error"]
-		return "", fmt.Errorf("gigachat request failed with status %d: %v", resp.StatusCode, errMsg)
-	}
-
-	var chatResp ChatResponse
-	err = json.Unmarshal(respBody, &chatResp)
-	if err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("empty response from GigaChat")
-	}
-
-	return chatResp.Choices[0].Message.Content, nil
 }
 
 func TestGigaChat_SendMessage_ExtractSummary(t *testing.T) {
@@ -130,19 +63,8 @@ func TestGigaChat_SendMessage_ExtractSummary(t *testing.T) {
 Шаг 4, теперь постепенно добавляем муку, тщательно. Каждый раз перемешиваем шаг 5. Теперь добавляем разрыхлитель, шаг 6, нарезаем яблоки, шаг 7, добавляем яблоки в тесто. Шаг 8, готовим форму для выпекания, шаг 9. Духовку заранее разогреваем до 180 градусов.
 Шаг 10 выбегается Шарлотта 30 40 минут, шаг 11, подача блюда.
 `
-
-	// Подготавливаем системный промпт
-	systemPrompt := `
-Ты — опытный ассистент. Проанализируй текст и предоставь краткую выжимку в виде пунктов:
-- Основная тема сообщения
-- Ключевые тезисы
-- Вывод по возможности (например, если это перегоовры, то к чему пришли стороны)
-
-Формат: маркированный список на русском языке.
-`
-
 	// Отправляем два сообщения: system + user
-	response, err := gigaClient.SendMessageWithSystemPrompt(systemPrompt, inputText)
+	response, err := gigaClient.SendMessageWithSystemPrompt(SystemPrompt, inputText)
 	require.NoError(t, err)
 	assert.NotEmpty(t, response)
 
