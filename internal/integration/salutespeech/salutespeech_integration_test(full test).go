@@ -111,7 +111,7 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 	t.Logf("File uploaded. request_file_id: %s", requestFileID)
 
 	// Шаг 2: Создание задачи на распознавание
-	encoding, err := GetAudioOptions(filePath)
+	encoding, err := getAudioOptions(filePath)
 	require.NoError(t, err)
 
 	taskURL := "https://smartspeech.sber.ru/rest/v1/speech:async_recognize"
