@@ -1,3 +1,9 @@
+-- Создаём схему tgbot, если её нет
+CREATE SCHEMA IF NOT EXISTS tgbot;
+
+-- Обеспечиваем наличие pgcrypto для gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- 1. Пользователи Telegram
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
@@ -26,7 +32,7 @@ CREATE TABLE transcriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meeting_id UUID REFERENCES meetings(id) ON DELETE CASCADE,
     full_text TEXT NOT NULL,
-    processed_at TIMESTAMPTZ DEFAULT NOW(),
+    processed_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 4. Краткое содержание (результат GigaChat)
@@ -34,7 +40,7 @@ CREATE TABLE summaries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meeting_id UUID REFERENCES meetings(id) ON DELETE CASCADE,
     summary_text TEXT NOT NULL,
-    generated_at TIMESTAMPTZ DEFAULT NOW(),
+    generated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 5. История взаимодействий с GigaChat (команда /chat)
@@ -46,10 +52,23 @@ CREATE TABLE chat_history (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Для быстрого доступа к данным пользователя
--- CREATE INDEX idx_meetings_user_id ON meetings(user_id);
--- CREATE INDEX idx_meetings_created ON meetings(created_at);
 
--- -- Для истории чата
--- CREATE INDEX idx_chat_user_id ON chat_history(user_id);
--- CREATE INDEX idx_chat_created ON chat_history(created_at);
+-- Индексы
+
+-- Для встреч
+CREATE INDEX idx_meetings_user_id ON meetings(user_id);
+CREATE INDEX idx_meetings_created ON meetings(created_at);
+CREATE INDEX idx_meetings_status ON meetings(status); -- фильтрация по статусу (processing, completed)
+CREATE INDEX idx_meetings_user_status ON meetings(user_id, status); -- для списка встреч пользователя с фильтром
+CREATE INDEX idx_meetings_user_created ON meetings(user_id, created_at DESC); -- для сортировки "сначала новые"
+
+-- Для транскрипций
+CREATE INDEX idx_transcriptions_meeting_id ON transcriptions(meeting_id); -- JOIN с meetings
+
+-- Для выжимок
+CREATE INDEX idx_summaries_meeting_id ON summaries(meeting_id); -- JOIN с meetings
+
+-- Для истории чата
+CREATE INDEX idx_chat_user_id ON chat_history(user_id);
+CREATE INDEX idx_chat_created ON chat_history(created_at DESC);
+CREATE INDEX idx_chat_user_created ON chat_history(user_id, created_at DESC); -- последние запросы пользователя

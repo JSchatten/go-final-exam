@@ -42,6 +42,12 @@ func InitDB(cfg *Config) (*DB, error) {
 
 	log.Println("Database connection established")
 
+	// Устанавливаем search_path
+	_, err = conn.Exec("SET search_path TO public")
+	if err != nil {
+		return nil, fmt.Errorf("failed to set search path: %w", err)
+	}
+
 	// Подготавливаем экземпляр базы для migrate
 	driver, err := postgres.WithInstance(conn, &postgres.Config{})
 	if err != nil {
