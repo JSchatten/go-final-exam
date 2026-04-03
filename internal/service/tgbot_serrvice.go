@@ -95,8 +95,15 @@ func (b *Bot) HandleVoice(c telebot.Context) error {
 		return c.Send("Не удалось загрузить аудиофайл.")
 	}
 
+	// Защита от path traversal
+	filename := filepath.Base(file.FilePath) // Оставляем только имя файла
+	if filename == "." || filename == ".." {
+		log.Printf("Invalid filename after Base(): %q", filename)
+		return c.Send("Недопустимый файл.")
+	}
+
 	audioDir := b.AudioStoragePath
-	audioPath := filepath.Join(audioDir, fmt.Sprintf("voice_%d_%d.ogg", user.ID, time.Now().Unix()))
+	audioPath := filepath.Join(audioDir, fmt.Sprintf("voice_%d_%d_%s", user.ID, time.Now().Unix(), filename))
 
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
 		log.Printf("Не удалось создать папку %s: %v", audioDir, err)
