@@ -18,26 +18,10 @@ type Config struct {
 	// Telegram
 	TelegramToken string `json:"telegram_token"`
 
+	// Modules
 	Database     *repository.Config   `json:"Database"`
 	SaluteSpeech *salutespeech.Config `json:"SaluteSpeech"`
 	Gigachat     *gigachat.Config     `json:"Gigachat"`
-
-	// GigaChat API
-	// GigaChatClientID string `json:"gigachat_client_id"`
-	// GigaChatScope    string `json:"gigachat_scope"`
-	// GigaChatAuthKey  string `json:"gigachat_auth_key"`
-
-	// // SaluteSpeech API
-	// SaluteSpeechClientID string `json:"salutespeech_client_id"`
-	// SaluteSpeechScope    string `json:"salutespeech_scope"`
-	// SaluteSpeechAuthKey  string `json:"salutespeech_auth_key"`
-
-	// // Database
-	// DBHost     string `json:"db_host"`
-	// DBPort     int    `json:"db_port"`
-	// DBUser     string `json:"db_user"`
-	// DBPassword string `json:"db_password"`
-	// DBName     string `json:"db_name"`
 
 	// Files
 	AudioStoragePath string `json:"audio_storage_path"` // путь к папке для сохранения аудиофайлов
