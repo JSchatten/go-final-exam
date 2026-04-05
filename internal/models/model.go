@@ -6,18 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Meeting - встреча (загруженная аудиозапись)
-type Meeting struct {
-	ID              uuid.UUID  `json:"id" db:"id"`
-	UserID          int64      `json:"user_id" db:"user_id"` // ссылается на telegram_id из users
-	Title           string     `json:"title" db:"title"`
-	AudioFilePath   *string    `json:"audio_file_path,omitempty" db:"audio_file_path"`
-	Status          string     `json:"status" db:"status"` // uploaded, processing, completed, failed
-	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
-	TranscriptionID *uuid.UUID `json:"transcription_id,omitempty" db:"transcription_id"`
-	SummaryID       *uuid.UUID `json:"summary_id,omitempty" db:"summary_id"`
-}
-
 // Transcription - результат распознавания речи (SaluteSpeech)
 type Transcription struct {
 	ID          uuid.UUID `json:"id" db:"id"`
