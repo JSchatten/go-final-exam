@@ -82,7 +82,7 @@ func TestSaluteSpeech_FullRecognitionFlow(t *testing.T) {
 
 	// Шаг 2: Создаём задачу распознавания с указанием пути к файлу (для правильного audio_encoding)
 	t.Log("Создаём задачу распознавания...")
-	taskID, err := client.CreateRecognitionTask(audioPath, fileID)
+	taskID, _, err := client.CreateRecognitionTask(audioPath, fileID)
 	require.NoError(t, err)
 	require.NotEmpty(t, taskID)
 	t.Logf("Задача создана: id = %s", taskID)

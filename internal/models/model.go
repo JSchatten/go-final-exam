@@ -1,17 +1,29 @@
 package models
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+const (
+	StatusUploaded     = "uploaded"
+	StatusProcessing   = "processing"
+	StatusCompleted    = "completed"
+	StatusTranscribing = "transcribing" // идёт распознавание речи
+	StatusSummarizing  = "summarizing"  // идёт создание выжимки
+	StatusFailed       = "failed"
+)
+
 // Transcription - результат распознавания речи (SaluteSpeech)
 type Transcription struct {
-	ID          uuid.UUID `json:"id" db:"id"`
-	MeetingID   uuid.UUID `json:"meeting_id" db:"meeting_id"`
-	FullText    string    `json:"full_text" db:"full_text"`
-	ProcessedAt time.Time `json:"processed_at" db:"processed_at"`
+	ID           uuid.UUID `json:"id" db:"id"`
+	MeetingID    uuid.UUID `json:"meeting_id" db:"meeting_id"`
+	SaluteTaskID string    `json:"salute_task_id" db:"salute_task_id"`
+	Status       string    `json:"status" db:"status"`
+	FullText     string    `json:"full_text" db:"full_text"`
+	ProcessedAt  time.Time `json:"processed_at" db:"processed_at"`
 }
 
 // Summary - краткая выжимка от GigaChat
@@ -29,4 +41,20 @@ type ChatHistory struct {
 	QueryText    string    `json:"query_text" db:"query_text"`
 	ResponseText string    `json:"response_text" db:"response_text"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+}
+
+type Meeting struct {
+	ID              uuid.UUID      `json:"id" db:"id"`
+	UserID          int64          `json:"user_id" db:"user_id"`
+	Title           string         `json:"title" db:"title"`
+	AudioFilePath   *string        `json:"audio_file_path,omitempty" db:"audio_file_path"`
+	Status          string         `json:"status" db:"status"`
+	CreatedAt       time.Time      `json:"created_at" db:"created_at"`
+	TranscriptionID *uuid.UUID     `json:"transcription_id,omitempty" db:"transcription_id"`
+	SummaryID       *uuid.UUID     `json:"summary_id,omitempty" db:"summary_id"`
+	ErrorMessage    sql.NullString `json:"error_message,omitempty" db:"error_message"`
+
+	// Дополнительные поля для вывода (не сохраняются в meetings)
+	TranscriptionText *string `json:"transcription_text,omitempty"`
+	SummaryText       *string `json:"summary_text,omitempty"`
 }

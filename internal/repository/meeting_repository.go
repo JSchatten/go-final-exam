@@ -234,3 +234,65 @@ func (r *MeetingRepository) SearchByUser(userID int64, query string) ([]*models.
 
 	return meetings, nil
 }
+
+// GetByMeetingID возвращает встречу по её ID (без проверки пользователя)
+func (r *MeetingRepository) GetByMeetingID(id uuid.UUID) (*models.Meeting, error) {
+	const query = `
+		SELECT 
+			m.id, m.user_id, m.title, m.audio_file_path, m.status, m.created_at,
+			t.full_text AS transcription_text,
+			s.summary_text AS summary_text
+		FROM meetings m
+		LEFT JOIN transcriptions t ON m.transcription_id = t.id
+		LEFT JOIN summaries s ON m.summary_id = s.id
+		WHERE m.id = $1
+		LIMIT 1
+	`
+
+	row := r.db.Conn.QueryRow(query, id)
+
+	var m models.Meeting
+	var transcriptionText sql.NullString
+	var summaryText sql.NullString
+
+	err := row.Scan(
+		&m.ID,
+		&m.UserID,
+		&m.Title,
+		&m.AudioFilePath,
+		&m.Status,
+		&m.CreatedAt,
+		&transcriptionText,
+		&summaryText,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // возвращаем nil, если не найдено
+		}
+		return nil, fmt.Errorf("failed to scan meeting by ID %s: %w", id, err)
+	}
+
+	// Устанавливаем тексты, если они есть
+	if transcriptionText.Valid {
+		m.TranscriptionText = &transcriptionText.String
+	}
+	if summaryText.Valid {
+		m.SummaryText = &summaryText.String
+	}
+
+	return &m, nil
+}
+
+func (r *MeetingRepository) UpdateError(id uuid.UUID, message string) error {
+	const query = `
+		UPDATE meetings
+		SET error_message = $2, updated_at = NOW()
+		WHERE id = $1
+	`
+	_, err := r.db.Conn.Exec(query, id, message)
+	if err != nil {
+		return fmt.Errorf("failed to update error message: %w", err)
+	}
+	return nil
+}

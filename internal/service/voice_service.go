@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -11,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JSchatten/go-final-exam/internal/models"
-	"github.com/google/uuid"
 	"gopkg.in/telebot.v3"
 )
 
@@ -106,42 +103,23 @@ func (b *Bot) HandleVoice(c telebot.Context) error {
 
 	log.Printf("Голосовое сообщение успешно сохранено: %s", audioPath)
 
-	// 4. Генерируем название встречи: "Аудиозапись (YYYY-MM-DD)"
-	meetingTitle := fmt.Sprintf("Аудиозапись (%s)", time.Now().Format("2006.01.02 15:04:05"))
-
-	// 5. Создаём модель встречи
-	meeting := &models.Meeting{
-		ID:            uuid.New(),
-		UserID:        user.ID,
-		Title:         meetingTitle,
-		AudioFilePath: &audioPath,
-		Status:        models.StatusUploaded,
-	}
-
-	// 6. Сохраняем встречу в БД
-	err = b.MeetingRepo.Create(meeting)
+	// Загружаем файл в SaluteSpeech (это не дорого)
+	requestFileID, err := b.SaluteSpeech.UploadFileByPath(audioPath)
 	if err != nil {
-		log.Printf("Failed to save meeting to DB: %v", err)
-		// Не прерываем - продолжаем, но логируем
+		log.Printf("Failed to upload file to SaluteSpeech: %v", err)
+		return c.Send("Не удалось отправить файл на распознавание.")
 	}
 
-	// 7. Запускаем фоновую обработку
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
+	// Создаём задачу распознавания
+	taskID, taskStatus, err := b.SaluteSpeech.CreateRecognitionTask(audioPath, requestFileID)
+	if err != nil {
+		log.Printf("Failed to create recognition task: %v", err)
+		return c.Send("Не удалось создать задачу распознавания.")
+	}
 
-		b.processMeeting(ctx, meeting)
-	}()
+	log.Printf("Задача на распознавание создана: ID=%s, Status=%s", taskID, taskStatus)
 
-	// 8. Отправляем подтверждение пользователю
-	message := fmt.Sprintf(
-		"Голосовое сообщение получено!\n\n"+
-			"- Название встречи: *%s*\n"+
-			"- Сохранено как: %s\n"+
-			"- Обработка начнётся в ближайшее время.",
-		meetingTitle,
-		filepath.Base(audioPath),
-	)
+	// Конец изменений
 
-	return c.Send(message, &telebot.SendOptions{ParseMode: "Markdown"})
+	return c.Send("Голосовое сообщение получено и отправлено на распознавание", &telebot.SendOptions{ParseMode: "Markdown"})
 }

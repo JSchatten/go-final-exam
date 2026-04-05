@@ -1,5 +1,5 @@
--- Создаём схему tgbot, если её нет
-CREATE SCHEMA IF NOT EXISTS tgbot;
+-- -- Создаём схему tgbot, если её нет
+-- CREATE SCHEMA IF NOT EXISTS tgbot;
 
 -- Обеспечиваем наличие pgcrypto для gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -22,6 +22,7 @@ CREATE TABLE meetings (
     title VARCHAR(512) DEFAULT 'Meeting',
     audio_file_path TEXT,        -- путь или URL к сохранённому файлу
     status VARCHAR(50) DEFAULT 'uploaded', -- uploaded, processing, completed, failed
+    error_message TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     transcription_id UUID,
     summary_id UUID
@@ -31,6 +32,8 @@ CREATE TABLE meetings (
 CREATE TABLE transcriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meeting_id UUID REFERENCES meetings(id) ON DELETE CASCADE,
+    salute_task_id VARCHAR(50)
+    status VARCHAR(50) DEFAULT 'NONE', -- NEW, RUNNING, CANCELED, DONE, ERROR
     full_text TEXT NOT NULL,
     processed_at TIMESTAMPTZ DEFAULT NOW()
 );
