@@ -25,8 +25,6 @@ func (b *Bot) HandleStart(c telebot.Context) error {
 		Username:   &user.Username,
 		FirstName:  &user.FirstName,
 		LastName:   &user.LastName,
-		// CreatedAt:  time.Now().UTC(),
-		// UpdatedAt: time.Now().UTC(),
 	}
 
 	var message string

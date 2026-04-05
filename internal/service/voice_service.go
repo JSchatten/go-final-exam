@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -114,8 +115,7 @@ func (b *Bot) HandleVoice(c telebot.Context) error {
 		UserID:        user.ID,
 		Title:         meetingTitle,
 		AudioFilePath: &audioPath,
-		Status:        "uploaded", // надо будет вынести в модельные константыы
-		// CreatedAt:     time.Now().UTC(),
+		Status:        models.StatusUploaded,
 	}
 
 	// 6. Сохраняем встречу в БД
@@ -125,9 +125,17 @@ func (b *Bot) HandleVoice(c telebot.Context) error {
 		// Не прерываем - продолжаем, но логируем
 	}
 
-	// 7. Отправляем подтверждение пользователю
+	// 7. Запускаем фоновую обработку
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		b.processMeeting(ctx, meeting)
+	}()
+
+	// 8. Отправляем подтверждение пользователю
 	message := fmt.Sprintf(
-		"🎙 Голосовое сообщение получено!\n\n"+
+		"Голосовое сообщение получено!\n\n"+
 			"- Название встречи: *%s*\n"+
 			"- Сохранено как: %s\n"+
 			"- Обработка начнётся в ближайшее время.",

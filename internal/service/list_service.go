@@ -30,10 +30,8 @@ func (b *Bot) HandleList(c telebot.Context) error {
 	for i, m := range meetings {
 		// Форматируем дату: 05.04.2025 14:30
 		dateStr := m.CreatedAt.Format("02.01.2006 15:04")
-
-		// Статус: uploaded → Загружено, completed → Готово
+		// Статус: uploaded - Загружено, completed - Готово
 		statusText := formatStatus(m.Status)
-
 		// Добавляем элемент
 		items = append(items, fmt.Sprintf(
 			"%d. *%s*\n   Дата: %s | Статус: %s",
@@ -56,29 +54,4 @@ func (b *Bot) HandleList(c telebot.Context) error {
 	return c.Send(message, &telebot.SendOptions{
 		ParseMode: "Markdown",
 	})
-}
-
-// Вспомогательная функция: читаемое название статуса
-// TODO: надо выделить рядом с константами
-func formatStatus(status string) string {
-	switch status {
-	case "uploaded":
-		return "Загружено"
-	case "processing":
-		return "Обрабатывается"
-	case "completed":
-		return "Готово"
-	case "failed":
-		return "Ошибка"
-	default:
-		return strings.Title(status)
-	}
-}
-
-// Экранируем специальные символы для Markdown
-func escapeMarkdown(text string) string {
-	for _, ch := range []string{"_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"} {
-		text = strings.ReplaceAll(text, ch, "\\"+ch)
-	}
-	return text
 }
