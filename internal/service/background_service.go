@@ -76,6 +76,7 @@ func (b *Bot) processMeeting(ctx context.Context, meeting *models.Meeting) {
 		if attempt == maxRetries {
 			_ = b.MeetingRepo.UpdateStatus(meeting.ID, models.StatusFailed)
 			// Оповестить пользователя
+			log.Printf("Meeting %s processing failed", meeting.ID)
 			b.notifyUserOfFailure(meeting.UserID, meeting.Title)
 			return
 		}
@@ -139,6 +140,10 @@ func (b *Bot) transcribeAndSummarize(ctx context.Context, meeting *models.Meetin
 }
 
 func (b *Bot) transcribeAudio(ctx context.Context, meeting *models.Meeting) (string, error) {
+	if meeting.AudioFilePath == nil {
+		return "", fmt.Errorf("audio file path is missing")
+	}
+
 	audioPath := *meeting.AudioFilePath
 
 	// 1. Загружаем файл в SaluteSpeech
@@ -169,7 +174,7 @@ func (b *Bot) transcribeAudio(ctx context.Context, meeting *models.Meeting) (str
 
 		switch taskResult.Status {
 		case "DONE":
-			break
+			// Ничего не делаем - просто выйдем из switch
 		case "ERROR", "CANCELED":
 			return "", fmt.Errorf("recognition task failed with status: %s", taskResult.Status)
 		default:
