@@ -26,10 +26,9 @@ func (r *MeetingRepository) Create(ctx context.Context, meeting *models.Meeting)
 			title,
 			audio_file_path,
 			status,
-			error_message,
-			created_at
+			error_message
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
 	_, err := r.db.Conn.ExecContext(ctx, query,
@@ -39,7 +38,6 @@ func (r *MeetingRepository) Create(ctx context.Context, meeting *models.Meeting)
 		meeting.AudioFilePath,
 		meeting.Status,
 		meeting.ErrorMessage,
-		meeting.CreatedAt,
 	)
 
 	if err != nil {
@@ -76,14 +74,14 @@ func (r *MeetingRepository) UpdateMeeting(ctx context.Context, meeting *models.M
 }
 
 // UpdateStatus обновляет статус встречи
-func (r *MeetingRepository) UpdateStatus(id uuid.UUID, status string) error {
+func (r *MeetingRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status string) error {
 	const query = `
 		UPDATE meetings
-		SET status = $2, updated_at = NOW()
+		SET status = $2
 		WHERE id = $1
 	`
 
-	_, err := r.db.Conn.Exec(query, id, status)
+	_, err := r.db.Conn.ExecContext(ctx, query, id, status)
 	if err != nil {
 		return fmt.Errorf("failed to update meeting status: %w", err)
 	}
@@ -91,52 +89,37 @@ func (r *MeetingRepository) UpdateStatus(id uuid.UUID, status string) error {
 	return nil
 }
 
-// UpdateTranscription обновляет ID транскрипции
-func (r *MeetingRepository) UpdateTranscription(id uuid.UUID, transID uuid.UUID) error {
+// UpdateError обновляет сообщение об ошибке
+func (r *MeetingRepository) UpdateError(ctx context.Context, id uuid.UUID, message string) error {
 	const query = `
 		UPDATE meetings
-		SET transcription_id = $2, updated_at = NOW()
+		SET error_message = $2
 		WHERE id = $1
 	`
 
-	_, err := r.db.Conn.Exec(query, id, transID)
+	_, err := r.db.Conn.ExecContext(ctx, query, id, message)
 	if err != nil {
-		return fmt.Errorf("failed to update transcription_id: %w", err)
-	}
-
-	return nil
-}
-
-// UpdateSummary обновляет ID выжимки
-func (r *MeetingRepository) UpdateSummary(id uuid.UUID, sumID uuid.UUID) error {
-	const query = `
-		UPDATE meetings
-		SET summary_id = $2, updated_at = NOW()
-		WHERE id = $1
-	`
-
-	_, err := r.db.Conn.Exec(query, id, sumID)
-	if err != nil {
-		return fmt.Errorf("failed to update summary_id: %w", err)
+		return fmt.Errorf("failed to update error message: %w", err)
 	}
 
 	return nil
 }
 
 // GetByUserAndID получает встречу по ID и пользователю, с транскрипцией и выжимкой
-func (r *MeetingRepository) GetByUserAndID(userID int64, meetingID uuid.UUID) (*models.Meeting, error) {
+func (r *MeetingRepository) GetByUserAndID(ctx context.Context, userID int64, meetingID uuid.UUID) (*models.Meeting, error) {
 	const query = `
 		SELECT 
 			m.id, m.user_id, m.title, m.audio_file_path, m.status, m.created_at,
 			t.full_text AS transcription_text,
 			s.summary_text AS summary_text
 		FROM meetings m
-		LEFT JOIN transcriptions t ON m.transcription_id = t.id
-		LEFT JOIN summaries s ON m.summary_id = s.id
+		LEFT JOIN transcriptions t ON t.meeting_id = m.id
+		LEFT JOIN summaries s ON s.meeting_id = m.id
 		WHERE m.id = $1 AND m.user_id = $2
+		LIMIT 1
 	`
 
-	row := r.db.Conn.QueryRow(query, meetingID, userID)
+	row := r.db.Conn.QueryRowContext(ctx, query, meetingID, userID)
 
 	var m models.Meeting
 	var transcriptionText sql.NullString
@@ -160,7 +143,6 @@ func (r *MeetingRepository) GetByUserAndID(userID int64, meetingID uuid.UUID) (*
 		return nil, fmt.Errorf("failed to scan meeting: %w", err)
 	}
 
-	// Преобразуем тексты в поля, если они есть
 	if transcriptionText.Valid {
 		m.TranscriptionText = &transcriptionText.String
 	}
@@ -172,7 +154,7 @@ func (r *MeetingRepository) GetByUserAndID(userID int64, meetingID uuid.UUID) (*
 }
 
 // ListByUser получает список встреч пользователя (с краткой информацией)
-func (r *MeetingRepository) ListByUser(userID int64) ([]*models.Meeting, error) {
+func (r *MeetingRepository) ListByUser(ctx context.Context, userID int64) ([]*models.Meeting, error) {
 	const query = `
 		SELECT id, user_id, title, status, created_at, audio_file_path
 		FROM meetings
@@ -180,7 +162,7 @@ func (r *MeetingRepository) ListByUser(userID int64) ([]*models.Meeting, error) 
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.db.Conn.Query(query, userID)
+	rows, err := r.db.Conn.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query meetings: %w", err)
 	}
@@ -208,16 +190,15 @@ func (r *MeetingRepository) ListByUser(userID int64) ([]*models.Meeting, error) 
 }
 
 // SearchByUser ищет встречи по названию, транскрипции или выжимке
-func (r *MeetingRepository) SearchByUser(userID int64, query string) ([]*models.Meeting, error) {
-	// Пока можно оставить LIKE, но при росте данных - перейти на tsvector
+func (r *MeetingRepository) SearchByUser(ctx context.Context, userID int64, query string) ([]*models.Meeting, error) {
 	const baseQuery = `
 		SELECT 
 			m.id, m.user_id, m.title, m.status, m.created_at,
 			t.full_text AS transcription_text,
 			s.summary_text AS summary_text
 		FROM meetings m
-		LEFT JOIN transcriptions t ON m.transcription_id = t.id
-		LEFT JOIN summaries s ON m.summary_id = s.id
+		LEFT JOIN transcriptions t ON t.meeting_id = m.id
+		LEFT JOIN summaries s ON s.meeting_id = m.id
 		WHERE m.user_id = $1
 		  AND (
 			LOWER(m.title) LIKE LOWER($2)
@@ -228,7 +209,7 @@ func (r *MeetingRepository) SearchByUser(userID int64, query string) ([]*models.
 	`
 
 	searchPattern := "%" + query + "%"
-	rows, err := r.db.Conn.Query(baseQuery, userID, searchPattern)
+	rows, err := r.db.Conn.QueryContext(ctx, baseQuery, userID, searchPattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute search query: %w", err)
 	}
@@ -267,21 +248,21 @@ func (r *MeetingRepository) SearchByUser(userID int64, query string) ([]*models.
 	return meetings, nil
 }
 
-// GetByMeetingID возвращает встречу по её ID (без проверки пользователя)
-func (r *MeetingRepository) GetByMeetingID(id uuid.UUID) (*models.Meeting, error) {
+// GetByMeetingID возвращает встречу по ID (без проверки пользователя)
+func (r *MeetingRepository) GetByMeetingID(ctx context.Context, id uuid.UUID) (*models.Meeting, error) {
 	const query = `
 		SELECT 
 			m.id, m.user_id, m.title, m.audio_file_path, m.status, m.created_at,
 			t.full_text AS transcription_text,
 			s.summary_text AS summary_text
 		FROM meetings m
-		LEFT JOIN transcriptions t ON m.transcription_id = t.id
-		LEFT JOIN summaries s ON m.summary_id = s.id
+		LEFT JOIN transcriptions t ON t.meeting_id = m.id
+		LEFT JOIN summaries s ON s.meeting_id = m.id
 		WHERE m.id = $1
 		LIMIT 1
 	`
 
-	row := r.db.Conn.QueryRow(query, id)
+	row := r.db.Conn.QueryRowContext(ctx, query, id)
 
 	var m models.Meeting
 	var transcriptionText sql.NullString
@@ -300,12 +281,11 @@ func (r *MeetingRepository) GetByMeetingID(id uuid.UUID) (*models.Meeting, error
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil // возвращаем nil, если не найдено
+			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to scan meeting by ID %s: %w", id, err)
 	}
 
-	// Устанавливаем тексты, если они есть
 	if transcriptionText.Valid {
 		m.TranscriptionText = &transcriptionText.String
 	}
@@ -314,17 +294,4 @@ func (r *MeetingRepository) GetByMeetingID(id uuid.UUID) (*models.Meeting, error
 	}
 
 	return &m, nil
-}
-
-func (r *MeetingRepository) UpdateError(id uuid.UUID, message string) error {
-	const query = `
-		UPDATE meetings
-		SET error_message = $2, updated_at = NOW()
-		WHERE id = $1
-	`
-	_, err := r.db.Conn.Exec(query, id, message)
-	if err != nil {
-		return fmt.Errorf("failed to update error message: %w", err)
-	}
-	return nil
 }

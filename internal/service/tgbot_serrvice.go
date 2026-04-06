@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
@@ -46,6 +47,14 @@ func NewBot(
 		SummaryRepo:       repository.NewSummaryRepository(db),
 		AudioStoragePath:  audioStoragePath,
 	}
+}
+
+// getCtx безопасно извлекает контекст из telebot.Context или возвращает background
+func (b *Bot) getCtx(c telebot.Context) context.Context {
+	if ctx, ok := c.Get("ctx").(context.Context); ok {
+		return ctx
+	}
+	return context.Background()
 }
 
 // HandleChat обрабатывает команду /chat.
@@ -128,16 +137,14 @@ func (b *Bot) notifyUserOfSuccess(userID int64, title string) {
 
 // HandleStart обрабатывает команду /start.
 func (b *Bot) HandleStart(c telebot.Context) error {
+	ctx := b.getCtx(c)
 	user := c.Sender()
 
-	// Проверяем, существует ли пользователь
-	existingUser, err := b.UserRepo.FindByTelegramID(user.ID)
+	existingUser, err := b.UserRepo.FindByTelegramID(ctx, user.ID)
 	if err != nil {
 		log.Printf("Error checking user existence: %v", err)
-		// Продолжаем, даже если ошибка - возможно, БД временно недоступна
 	}
 
-	// Создаём модель для сохранения/обновления
 	userDB := &models.User{
 		TelegramID: user.ID,
 		Username:   &user.Username,
@@ -148,15 +155,14 @@ func (b *Bot) HandleStart(c telebot.Context) error {
 	var message string
 
 	if existingUser == nil {
-		err = b.UserRepo.CreateIfNotExists(userDB) // Пользователя нет - регистрируем нового
+		err = b.UserRepo.CreateIfNotExists(ctx, userDB)
 		if err != nil {
-			log.Printf("Failed to save new user: %v", err) // всё равно отправим приветствие
+			log.Printf("Failed to save new user: %v", err)
 		}
 		message = fmt.Sprintf("Добро пожаловать, %s!\nТы успешно зарегистрирован.", user.FirstName)
 	} else {
-		// Обновляем данные и время последнего визита
-		userDB.ID = existingUser.ID // нужно для обновления
-		err = b.UserRepo.Update(userDB)
+		userDB.ID = existingUser.ID
+		err = b.UserRepo.Update(ctx, userDB)
 		if err != nil {
 			log.Printf("Failed to update user: %v", err)
 		}
@@ -168,6 +174,7 @@ func (b *Bot) HandleStart(c telebot.Context) error {
 
 // /get 1
 func (b *Bot) HandleGet(c telebot.Context) error {
+	ctx := b.getCtx(c)
 	user := c.Sender()
 	args := c.Args()
 
@@ -175,7 +182,6 @@ func (b *Bot) HandleGet(c telebot.Context) error {
 		return c.Send("Укажите номер встречи. Пример: /get 1")
 	}
 
-	// Парсим номер
 	index, err := strconv.Atoi(args[0])
 	if err != nil {
 		return c.Send("Неверный формат номера. Укажите число.")
@@ -185,23 +191,19 @@ func (b *Bot) HandleGet(c telebot.Context) error {
 		return c.Send("Номер должен быть больше 0.")
 	}
 
-	// Получаем все встречи
-	meetings, err := b.MeetingRepo.ListByUser(user.ID)
+	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
 	if err != nil {
 		log.Printf("Failed to fetch meetings: %v", err)
 		return c.Send("Не удалось загрузить список встреч.")
 	}
 
-	// Проверяем диапазон
 	if index > len(meetings) {
 		return c.Send(fmt.Sprintf("Нет встречи с номером %d. Доступно встреч: %d.", index, len(meetings)))
 	}
 
-	// Берём встречу по индексу
-	meeting := meetings[index-1] // т.к. пользователь вводит 1-based
+	meeting := meetings[index-1]
 
-	// Теперь можно загрузить полные данные: транскрипцию и выжимку
-	fullMeeting, err := b.MeetingRepo.GetByUserAndID(user.ID, meeting.ID)
+	fullMeeting, err := b.MeetingRepo.GetByUserAndID(ctx, user.ID, meeting.ID)
 	if err != nil {
 		log.Printf("Failed to load full meeting %s: %v", meeting.ID, err)
 		return c.Send("Не удалось загрузить содержимое встречи.")
@@ -211,7 +213,6 @@ func (b *Bot) HandleGet(c telebot.Context) error {
 		return c.Send("Встреча не найдена или доступ запрещён.")
 	}
 
-	// Формируем ответ
 	var result strings.Builder
 	result.WriteString(fmt.Sprintf("*%s*\n\n", fullMeeting.Title))
 
@@ -235,6 +236,7 @@ func (b *Bot) HandleGet(c telebot.Context) error {
 
 // HandleFind обрабатывает команду /find "запрос"
 func (b *Bot) HandleFind(c telebot.Context) error {
+	ctx := b.getCtx(c)
 	user := c.Sender()
 	args := c.Args()
 
@@ -247,28 +249,23 @@ func (b *Bot) HandleFind(c telebot.Context) error {
 		return c.Send("Запрос не может быть пустым.")
 	}
 
-	// Логируем запрос
 	log.Printf("User %d searching for: %q", user.ID, query)
 
-	// 1. Выполняем поиск
-	meetings, err := b.MeetingRepo.SearchByUser(user.ID, query)
+	meetings, err := b.MeetingRepo.SearchByUser(ctx, user.ID, query)
 	if err != nil {
 		log.Printf("Search failed for user %d: %v", user.ID, err)
 		return c.Send("Произошла ошибка при поиске.")
 	}
 
-	// 2. Если ничего не найдено
 	if len(meetings) == 0 {
 		return c.Send(fmt.Sprintf("Ничего не найдено по запросу:\n`%s`", escapeMarkdown(query)),
 			&telebot.SendOptions{ParseMode: "Markdown"})
 	}
 
-	// 3. Формируем список результатов
 	var items []string
 	for i, m := range meetings {
 		dateStr := m.CreatedAt.Format("02.01.2006 15:04")
 		statusText := formatStatus(m.Status)
-
 		items = append(items, fmt.Sprintf(
 			"%d. *%s*\n   Дата: %s | Статус: %s",
 			i+1,
@@ -278,7 +275,6 @@ func (b *Bot) HandleFind(c telebot.Context) error {
 		))
 	}
 
-	// 4. Отправляем результат
 	message := fmt.Sprintf(
 		"Найдено %d результатов по запросу _%s_:\n\n%s\n\n"+
 			"Чтобы открыть используйте /get [номер]",
@@ -287,45 +283,37 @@ func (b *Bot) HandleFind(c telebot.Context) error {
 		strings.Join(items, "\n\n"),
 	)
 
-	return c.Send(message, &telebot.SendOptions{
-		ParseMode: "Markdown",
-	})
+	return c.Send(message, &telebot.SendOptions{ParseMode: "Markdown"})
 }
 
 // HandleList обрабатывает команду /list.
 func (b *Bot) HandleList(c telebot.Context) error {
+	ctx := b.getCtx(c)
 	user := c.Sender()
 
-	// 1. Получаем встречи пользователя
-	meetings, err := b.MeetingRepo.ListByUser(user.ID)
+	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
 	if err != nil {
 		log.Printf("Failed to fetch meetings for user %d: %v", user.ID, err)
 		return c.Send("Не удалось загрузить список встреч.")
 	}
 
-	// 2. Если нет встреч
 	if len(meetings) == 0 {
 		return c.Send("У вас пока нет сохранённых встреч.\nОтправьте голосовое сообщение, и оно появится здесь.")
 	}
 
-	// 3. Формируем список
 	var items []string
 	for i, m := range meetings {
-		// Форматируем дату: 05.04.2025 14:30
 		dateStr := m.CreatedAt.Format("02.01.2006 15:04")
-		// Статус: uploaded - Загружено, completed - Готово
 		statusText := formatStatus(m.Status)
-		// Добавляем элемент
 		items = append(items, fmt.Sprintf(
 			"%d. *%s*\n   Дата: %s | Статус: %s",
 			i+1,
-			escapeMarkdown(m.Title),
+			m.Title,
 			dateStr,
 			statusText,
 		))
 	}
 
-	// 4. Собираем сообщение
 	message := fmt.Sprintf(
 		"Ваши встречи (%d):\n\n%s\n\n"+
 			"Чтобы получить текст встречи, используйте команду /get [номер]",
@@ -333,8 +321,5 @@ func (b *Bot) HandleList(c telebot.Context) error {
 		strings.Join(items, "\n\n"),
 	)
 
-	// 5. Отправляем с Markdown
-	return c.Send(message, &telebot.SendOptions{
-		ParseMode: "Markdown",
-	})
+	return c.Send(message, &telebot.SendOptions{ParseMode: "Markdown"})
 }

@@ -142,14 +142,7 @@ func (b *Bot) HandleVoice(c telebot.Context) error {
 		// Не фатально
 	}
 
-	message := fmt.Sprintf(
-		"Voice message received and sent for transcription!\n\n"+
-			"Task: `%s`\n"+
-			"Status: *%s*\n\n"+
-			"I will notify you when ready.",
-		taskID,
-		taskStatus,
-	)
+	message := "Сообщение принято для обработки!"
 
 	return c.Send(message, &telebot.SendOptions{ParseMode: "Markdown"})
 }

@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -16,21 +17,18 @@ func NewUserRepository(db *DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) CreateIfNotExists(user *models.User) error {
+func (r *UserRepository) CreateIfNotExists(ctx context.Context, user *models.User) error {
 	const query = `
 		INSERT INTO users (telegram_id, username, first_name, last_name)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (telegram_id) DO NOTHING
 	`
 
-	_, err := r.db.Conn.Exec(
-		query,
+	_, err := r.db.Conn.ExecContext(ctx, query,
 		user.TelegramID,
 		user.Username,
 		user.FirstName,
 		user.LastName,
-		// user.CreatedAt,
-		// user.UpdatedAt,
 	)
 
 	if err != nil {
@@ -40,14 +38,15 @@ func (r *UserRepository) CreateIfNotExists(user *models.User) error {
 	return nil
 }
 
-func (r *UserRepository) FindByTelegramID(telegramID int64) (*models.User, error) {
+func (r *UserRepository) FindByTelegramID(ctx context.Context, telegramID int64) (*models.User, error) {
 	const query = `
 		SELECT id, telegram_id, username, first_name, last_name, created_at, updated_at
 		FROM users
 		WHERE telegram_id = $1
+		LIMIT 1
 	`
 
-	row := r.db.Conn.QueryRow(query, telegramID)
+	row := r.db.Conn.QueryRowContext(ctx, query, telegramID)
 	var u models.User
 
 	err := u.ScanRow(row)
@@ -62,15 +61,14 @@ func (r *UserRepository) FindByTelegramID(telegramID int64) (*models.User, error
 }
 
 // Update updates the users updated_at timestamp and other fields
-func (r *UserRepository) Update(user *models.User) error {
+func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 	const query = `
 		UPDATE users 
 		SET username = $2, first_name = $3, last_name = $4, updated_at = $5
 		WHERE telegram_id = $1
 	`
 
-	_, err := r.db.Conn.Exec(
-		query,
+	_, err := r.db.Conn.ExecContext(ctx, query,
 		user.TelegramID,
 		user.Username,
 		user.FirstName,

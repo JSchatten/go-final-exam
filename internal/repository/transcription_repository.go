@@ -40,15 +40,14 @@ func (r *TranscriptionRepository) Create(ctx context.Context, meetingID uuid.UUI
 }
 
 // Update обновляет транскрипцию — статус, текст и время обработки
-// Используется при завершении распознавания
-func (r *TranscriptionRepository) Update(id uuid.UUID, status, fullText string) error {
+func (r *TranscriptionRepository) Update(ctx context.Context, id uuid.UUID, status, fullText string) error {
 	const query = `
 		UPDATE transcriptions
 		SET status = $1, full_text = $2, processed_at = $3
 		WHERE id = $4
 	`
 
-	_, err := r.db.Conn.Exec(query, status, fullText, time.Now().UTC(), id)
+	_, err := r.db.Conn.ExecContext(ctx, query, status, fullText, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("failed to update transcription: %w", err)
 	}
@@ -57,7 +56,7 @@ func (r *TranscriptionRepository) Update(id uuid.UUID, status, fullText string) 
 }
 
 // GetByMeetingID возвращает транскрипцию по ID встречи
-func (r *TranscriptionRepository) GetByMeetingID(meetingID uuid.UUID) (*models.Transcription, error) {
+func (r *TranscriptionRepository) GetByMeetingID(ctx context.Context, meetingID uuid.UUID) (*models.Transcription, error) {
 	const query = `
 		SELECT id, meeting_id, salute_task_id, status, full_text, processed_at
 		FROM transcriptions
@@ -66,7 +65,7 @@ func (r *TranscriptionRepository) GetByMeetingID(meetingID uuid.UUID) (*models.T
 	`
 
 	var transcription models.Transcription
-	err := r.db.Conn.QueryRow(query, meetingID).Scan(
+	err := r.db.Conn.QueryRowContext(ctx, query, meetingID).Scan(
 		&transcription.ID,
 		&transcription.MeetingID,
 		&transcription.SaluteTaskID,
@@ -86,7 +85,7 @@ func (r *TranscriptionRepository) GetByMeetingID(meetingID uuid.UUID) (*models.T
 }
 
 // GetByID возвращает транскрипцию по ID
-func (r *TranscriptionRepository) GetByID(id uuid.UUID) (*models.Transcription, error) {
+func (r *TranscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Transcription, error) {
 	const query = `
 		SELECT id, meeting_id, salute_task_id, status, full_text, processed_at
 		FROM transcriptions
@@ -95,7 +94,7 @@ func (r *TranscriptionRepository) GetByID(id uuid.UUID) (*models.Transcription, 
 	`
 
 	var transcription models.Transcription
-	err := r.db.Conn.QueryRow(query, id).Scan(
+	err := r.db.Conn.QueryRowContext(ctx, query, id).Scan(
 		&transcription.ID,
 		&transcription.MeetingID,
 		&transcription.SaluteTaskID,
