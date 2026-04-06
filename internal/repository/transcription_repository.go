@@ -112,3 +112,42 @@ func (r *TranscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (*m
 
 	return &transcription, nil
 }
+
+// GetUnprocessed возвращает все транскрипции со статусом NEW или RUNNING
+func (r *TranscriptionRepository) GetUnprocessed(ctx context.Context) ([]*models.Transcription, error) {
+	// статусы и так uppercase, но по-хорошему это вообще в списки надо офрмить на уровне БД
+	const query = `
+		SELECT id, meeting_id, salute_task_id, status, full_text, processed_at
+		FROM transcriptions
+		WHERE status = 'NEW' OR status = 'RUNNING'
+		ORDER BY processed_at ASC`
+
+	rows, err := r.db.Conn.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unprocessed transcriptions: %w", err)
+	}
+	defer rows.Close()
+
+	var transcriptions []*models.Transcription
+	for rows.Next() {
+		var t models.Transcription
+		err := rows.Scan(
+			&t.ID,
+			&t.MeetingID,
+			&t.SaluteTaskID,
+			&t.Status,
+			&t.FullText,
+			&t.ProcessedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan transcription row: %w", err)
+		}
+		transcriptions = append(transcriptions, &t)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return transcriptions, nil
+}

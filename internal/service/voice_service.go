@@ -25,7 +25,7 @@ var AllowedAudioExtensions = map[string]bool{
 
 const MaxFileSize = 500 * 1024 * 1024 // 500 МБ
 
-func (b *Bot) HandleVoice(c telebot.Context) error {
+func (b *BotService) HandleVoice(c telebot.Context) error {
 	voice := c.Message().Voice
 	user := c.Sender()
 
@@ -147,7 +147,7 @@ func (b *Bot) HandleVoice(c telebot.Context) error {
 	return c.Send(message, &telebot.SendOptions{ParseMode: "Markdown"})
 }
 
-func setMeetingError(b *Bot, ctx context.Context, meeting *models.Meeting, msg string) {
+func setMeetingError(b *BotService, ctx context.Context, meeting *models.Meeting, msg string) {
 	log.Println("Error:", msg)
 	meeting.Status = models.StatusFailed
 	meeting.ErrorMessage.Valid = true

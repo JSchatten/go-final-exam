@@ -20,7 +20,7 @@ type Transcription struct {
 	MeetingID    uuid.UUID `json:"meeting_id" db:"meeting_id"`
 	SaluteTaskID string    `json:"salute_task_id" db:"salute_task_id"`
 	Status       string    `json:"status" db:"status"`
-	FullText     string    `json:"full_text" db:"full_text"`
+	FullText     *string   `json:"full_text,omitempty" db:"full_text"`
 	ProcessedAt  time.Time `json:"processed_at" db:"processed_at"`
 }
 

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/telebot.v3"
 
 	"github.com/JSchatten/go-final-exam/internal/config"
@@ -17,6 +18,7 @@ import (
 	"github.com/JSchatten/go-final-exam/internal/integration/salutespeech"
 	"github.com/JSchatten/go-final-exam/internal/repository"
 	"github.com/JSchatten/go-final-exam/internal/service"
+	"github.com/JSchatten/go-final-exam/internal/worker"
 )
 
 func main() {
@@ -66,7 +68,7 @@ func main() {
 	}
 
 	// Создаём экземпляр бота-сервиса
-	bot := service.NewBot(
+	bot := service.NewBotService(
 		telebotInstance,
 		gigaChat,
 		saluteSpeech,
@@ -93,21 +95,43 @@ func main() {
 
 	// Перехватываем системные сигналы
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-quit
 		log.Printf("Received signal: %s. Shutting down...\n", sig)
 		cancel()
 	}()
 
-	// Запускаем бота
-	log.Println("Bot is starting...")
-	go telebotInstance.Start()
+	// Запускаем errgroup
+	g, gCtx := errgroup.WithContext(ctx)
 
-	// Ждём сигнала завершения
-	<-ctx.Done()
+	// Запуск бота с graceful shutdown
+	g.Go(func() error {
+		log.Println("Bot: starting...")
 
-	log.Println("Shutting down bot...")
-	telebotInstance.Stop()
+		// Запускаем Start в отдельной горутине
+		go bot.Telebot.Start()
+
+		// Ждём сигнала остановки
+		<-gCtx.Done()
+
+		log.Println("Bot: stopping...")
+		bot.Telebot.Stop() // ← Это заставит Start() вернуться
+
+		return nil
+	})
+
+	// Запуск воркера
+	transcriptionWorker := worker.NewTranscriptionWorker(bot.TranscriptionRepo)
+	g.Go(func() error {
+		return transcriptionWorker.Start(gCtx)
+	})
+
+	// Ждём завершения всех задач
+	if err := g.Wait(); err != nil && err != ctx.Err() {
+		log.Printf("Application error: %v", err)
+	}
+
 	log.Println("Application stopped.")
+
 }

@@ -15,8 +15,8 @@ import (
 	"github.com/JSchatten/go-final-exam/internal/repository"
 )
 
-// Bot представляет Telegram-бота и его зависимости.
-type Bot struct {
+// BotService представляет Telegram-бота и его зависимости.
+type BotService struct {
 	Telebot           *telebot.Bot
 	GigaChat          *gigachat.GigaChatClient
 	SaluteSpeech      *salutespeech.SaluteSpeechClient
@@ -28,15 +28,15 @@ type Bot struct {
 	AudioStoragePath  string
 }
 
-// NewBot создаёт новый экземпляр бота с готовыми зависимостями
-func NewBot(
+// NewBotService создаёт новый экземпляр бота с готовыми зависимостями
+func NewBotService(
 	bot *telebot.Bot,
 	gigaChat *gigachat.GigaChatClient,
 	saluteSpeech *salutespeech.SaluteSpeechClient,
 	db *repository.DB,
 	audioStoragePath string,
-) *Bot {
-	return &Bot{
+) *BotService {
+	return &BotService{
 		Telebot:           bot,
 		GigaChat:          gigaChat,
 		SaluteSpeech:      saluteSpeech,
@@ -50,7 +50,7 @@ func NewBot(
 }
 
 // getCtx безопасно извлекает контекст из telebot.Context или возвращает background
-func (b *Bot) getCtx(c telebot.Context) context.Context {
+func (b *BotService) getCtx(c telebot.Context) context.Context {
 	if ctx, ok := c.Get("ctx").(context.Context); ok {
 		return ctx
 	}
@@ -58,7 +58,7 @@ func (b *Bot) getCtx(c telebot.Context) context.Context {
 }
 
 // HandleChat обрабатывает команду /chat.
-func (b *Bot) HandleChat(c telebot.Context) error {
+func (b *BotService) HandleChat(c telebot.Context) error {
 	prompt := c.Text()[6:]
 	if prompt == "" {
 		return c.Send("Напишите запрос после команды. Пример: /chat Как дела?")
@@ -72,7 +72,7 @@ func (b *Bot) HandleChat(c telebot.Context) error {
 }
 
 // HandleAudio обрабатывает аудиофайлы.
-func (b *Bot) HandleAudio(c telebot.Context) error {
+func (b *BotService) HandleAudio(c telebot.Context) error {
 	transcript := "[Транскрипция аудиофайла будет здесь]"
 
 	summaryPrompt := fmt.Sprintf("Сделай краткую выжимку из следующего текста:\n\n%s", transcript)
@@ -87,13 +87,13 @@ func (b *Bot) HandleAudio(c telebot.Context) error {
 }
 
 // HandleText обрабатывает текстовые сообщения.
-func (b *Bot) HandleText(c telebot.Context) error {
+func (b *BotService) HandleText(c telebot.Context) error {
 	text := c.Text()
 	return c.Send(fmt.Sprintf("Вы написали: %q (текст пока не обрабатывается)", text))
 }
 
 // notifyUserOfFailure отправляет пользователю сообщение о сбое обработки
-func (b *Bot) notifyUserOfFailure(userID int64, meetingTitle string) {
+func (b *BotService) notifyUserOfFailure(userID int64, meetingTitle string) {
 	messageText := fmt.Sprintf(
 		"Не удалось обработать встречу:\n\n"+
 			"*%s*\n\n"+
@@ -121,7 +121,7 @@ func (b *Bot) notifyUserOfFailure(userID int64, meetingTitle string) {
 	log.Printf("Failure notification sent to user %d, message ID: %d", userID, msg.ID)
 }
 
-func (b *Bot) notifyUserOfSuccess(userID int64, title string) {
+func (b *BotService) notifyUserOfSuccess(userID int64, title string) {
 	msg := fmt.Sprintf("Встреча обработана:\n\n*%s*\n\nТеперь доступна в /list", escapeMarkdown(title))
 	recipient := &telebot.User{ID: userID}
 
@@ -136,7 +136,7 @@ func (b *Bot) notifyUserOfSuccess(userID int64, title string) {
 }
 
 // HandleStart обрабатывает команду /start.
-func (b *Bot) HandleStart(c telebot.Context) error {
+func (b *BotService) HandleStart(c telebot.Context) error {
 	ctx := b.getCtx(c)
 	user := c.Sender()
 
@@ -173,7 +173,7 @@ func (b *Bot) HandleStart(c telebot.Context) error {
 }
 
 // /get 1
-func (b *Bot) HandleGet(c telebot.Context) error {
+func (b *BotService) HandleGet(c telebot.Context) error {
 	ctx := b.getCtx(c)
 	user := c.Sender()
 	args := c.Args()
@@ -235,7 +235,7 @@ func (b *Bot) HandleGet(c telebot.Context) error {
 }
 
 // HandleFind обрабатывает команду /find "запрос"
-func (b *Bot) HandleFind(c telebot.Context) error {
+func (b *BotService) HandleFind(c telebot.Context) error {
 	ctx := b.getCtx(c)
 	user := c.Sender()
 	args := c.Args()
@@ -287,7 +287,7 @@ func (b *Bot) HandleFind(c telebot.Context) error {
 }
 
 // HandleList обрабатывает команду /list.
-func (b *Bot) HandleList(c telebot.Context) error {
+func (b *BotService) HandleList(c telebot.Context) error {
 	ctx := b.getCtx(c)
 	user := c.Sender()
 
