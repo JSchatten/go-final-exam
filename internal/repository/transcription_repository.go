@@ -39,8 +39,8 @@ func (r *TranscriptionRepository) Create(ctx context.Context, meetingID uuid.UUI
 	return id, nil
 }
 
-// Update обновляет транскрипцию — статус, текст и время обработки
-func (r *TranscriptionRepository) Update(ctx context.Context, id uuid.UUID, status, fullText string) error {
+// Update обновляет транскрипцию: статус, текст и время обработки
+func (r *TranscriptionRepository) Update(ctx context.Context, id uuid.UUID, status string, fullText *string) error {
 	const query = `
 		UPDATE transcriptions
 		SET status = $1, full_text = $2, processed_at = $3

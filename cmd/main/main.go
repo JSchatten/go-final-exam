@@ -122,7 +122,7 @@ func main() {
 	})
 
 	// Запуск воркера
-	transcriptionWorker := worker.NewTranscriptionWorker(bot.TranscriptionRepo)
+	transcriptionWorker := worker.NewTranscriptionWorker(bot.TranscriptionRepo, bot.SaluteSpeech)
 	g.Go(func() error {
 		return transcriptionWorker.Start(gCtx)
 	})
