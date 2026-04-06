@@ -218,15 +218,16 @@ func (b *BotService) HandleGet(c telebot.Context) error {
 
 	if fullMeeting.SummaryText != nil {
 		result.WriteString("*Краткая выжимка:*\n")
-		result.WriteString(escapeMarkdown(*fullMeeting.SummaryText))
+		// result.WriteString(escapeMarkdown(*fullMeeting.SummaryText))
+		result.WriteString(*fullMeeting.SummaryText)
 	} else {
 		result.WriteString("*Краткая выжимка:* ещё не готова.\n\n")
 	}
 
 	if fullMeeting.TranscriptionText != nil {
-		result.WriteString("*Транскрипция:*\n")
-		result.WriteString(escapeMarkdown(*fullMeeting.TranscriptionText))
-		result.WriteString("\n\n")
+		result.WriteString("\n*Транскрипция:*\n")
+		result.WriteString(*fullMeeting.TranscriptionText)
+		result.WriteString("\n")
 	} else {
 		result.WriteString("*Транскрипция:* ещё не готова.\n\n")
 	}
