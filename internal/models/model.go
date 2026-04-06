@@ -8,12 +8,10 @@ import (
 )
 
 const (
-	StatusUploaded     = "uploaded"
-	StatusProcessing   = "processing"
-	StatusCompleted    = "completed"
-	StatusTranscribing = "transcribing" // идёт распознавание речи
-	StatusSummarizing  = "summarizing"  // идёт создание выжимки
-	StatusFailed       = "failed"
+	StatusUploaded   = "uploaded"
+	StatusProcessing = "processing"
+	StatusCompleted  = "completed"
+	StatusFailed     = "failed"
 )
 
 // Transcription - результат распознавания речи (SaluteSpeech)
@@ -44,15 +42,13 @@ type ChatHistory struct {
 }
 
 type Meeting struct {
-	ID              uuid.UUID      `json:"id" db:"id"`
-	UserID          int64          `json:"user_id" db:"user_id"`
-	Title           string         `json:"title" db:"title"`
-	AudioFilePath   *string        `json:"audio_file_path,omitempty" db:"audio_file_path"`
-	Status          string         `json:"status" db:"status"`
-	CreatedAt       time.Time      `json:"created_at" db:"created_at"`
-	TranscriptionID *uuid.UUID     `json:"transcription_id,omitempty" db:"transcription_id"`
-	SummaryID       *uuid.UUID     `json:"summary_id,omitempty" db:"summary_id"`
-	ErrorMessage    sql.NullString `json:"error_message,omitempty" db:"error_message"`
+	ID            uuid.UUID      `json:"id" db:"id"`
+	UserID        int64          `json:"user_id" db:"user_id"`
+	Title         string         `json:"title" db:"title"`
+	AudioFilePath *string        `json:"audio_file_path,omitempty" db:"audio_file_path"`
+	Status        string         `json:"status" db:"status"`
+	CreatedAt     time.Time      `json:"created_at" db:"created_at"`
+	ErrorMessage  sql.NullString `json:"error_message,omitempty" db:"error_message"`
 
 	// Дополнительные поля для вывода (не сохраняются в meetings)
 	TranscriptionText *string `json:"transcription_text,omitempty"`

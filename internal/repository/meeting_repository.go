@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -17,27 +18,58 @@ func NewMeetingRepository(db *DB) *MeetingRepository {
 	return &MeetingRepository{db: db}
 }
 
-// Create создаёт новую встречу
-func (r *MeetingRepository) Create(meeting *models.Meeting) error {
+func (r *MeetingRepository) Create(ctx context.Context, meeting *models.Meeting) error {
 	const query = `
-		INSERT INTO meetings (id, user_id, title, audio_file_path, status, transcription_id, summary_id)
+		INSERT INTO meetings (
+			id,
+			user_id,
+			title,
+			audio_file_path,
+			status,
+			error_message,
+			created_at
+		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 
-	_, err := r.db.Conn.Exec(
-		query,
+	_, err := r.db.Conn.ExecContext(ctx, query,
 		meeting.ID,
 		meeting.UserID,
 		meeting.Title,
 		meeting.AudioFilePath,
 		meeting.Status,
-		// meeting.CreatedAt,
-		meeting.TranscriptionID,
-		meeting.SummaryID,
+		meeting.ErrorMessage,
+		meeting.CreatedAt,
 	)
 
 	if err != nil {
 		return fmt.Errorf("failed to create meeting: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateMeeting обновляет существующую встречу
+func (r *MeetingRepository) UpdateMeeting(ctx context.Context, meeting *models.Meeting) error {
+	const query = `
+		UPDATE meetings
+		SET 
+			title = $1,
+			audio_file_path = $2,
+			status = $3,
+			error_message = $4
+		WHERE id = $5
+	`
+
+	_, err := r.db.Conn.ExecContext(ctx, query,
+		meeting.Title,
+		meeting.AudioFilePath,
+		meeting.Status,
+		meeting.ErrorMessage,
+		meeting.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update meeting: %w", err)
 	}
 
 	return nil

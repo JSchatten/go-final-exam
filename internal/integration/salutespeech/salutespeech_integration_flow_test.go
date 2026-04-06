@@ -46,7 +46,8 @@ func setupClient(t *testing.T) *SaluteSpeechClient {
 
 func getTestAudioPath() string {
 	paths := []string{
-		"../../../test/шарлотка.ogg", // короткая инструкция
+		"../../../test/шарлотка.oga", // тестовое аудио
+		// "../../../test/шарлотка.ogg", // короткая инструкция
 		// "../../../test/шарлотка.wav", // полная версия
 	}
 

@@ -380,7 +380,10 @@ func getAudioOptions(filePath string) (encoding string, err error) {
 		// Telegram отправляет .ogg с Opus - используем OGG_OPUS
 		// Требует 16000 или 48000 Hz, только моно
 		return "OPUS", nil
-
+	case ".oga":
+		// Telegram отправляет .ogg с Opus - используем OGG_OPUS
+		// Требует 16000 или 48000 Hz, только моно
+		return "OPUS", nil
 	default:
 		return "", fmt.Errorf("unsupported audio format: %s", ext)
 	}

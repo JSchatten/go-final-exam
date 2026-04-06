@@ -23,18 +23,16 @@ CREATE TABLE meetings (
     audio_file_path TEXT,        -- путь или URL к сохранённому файлу
     status VARCHAR(50) DEFAULT 'uploaded', -- uploaded, processing, completed, failed
     error_message TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    transcription_id UUID,
-    summary_id UUID
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 3. Транскрипция (результат SaluteSpeech)
 CREATE TABLE transcriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meeting_id UUID REFERENCES meetings(id) ON DELETE CASCADE,
-    salute_task_id VARCHAR(50)
+    salute_task_id VARCHAR(50),
     status VARCHAR(50) DEFAULT 'NONE', -- NEW, RUNNING, CANCELED, DONE, ERROR
-    full_text TEXT NOT NULL,
+    full_text TEXT,
     processed_at TIMESTAMPTZ DEFAULT NOW()
 );
 

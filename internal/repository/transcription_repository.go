@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -18,14 +19,19 @@ func NewTranscriptionRepository(db *DB) *TranscriptionRepository {
 }
 
 // Create создает новую запись транскрипции с начальным статусом и ID задачи SaluteSpeech
-func (r *TranscriptionRepository) Create(meetingID uuid.UUID, saluteTaskID string, status string) (uuid.UUID, error) {
+func (r *TranscriptionRepository) Create(ctx context.Context, meetingID uuid.UUID, saluteTaskID string, status string) (uuid.UUID, error) {
 	id := uuid.New()
 	const query = `
-		INSERT INTO transcriptions (id, meeting_id, salute_task_id, status, processed_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO transcriptions (id, meeting_id, salute_task_id, status)
+		VALUES ($1, $2, $3, $4)
 	`
 
-	_, err := r.db.Conn.Exec(query, id, meetingID, saluteTaskID, status, time.Now().UTC())
+	_, err := r.db.Conn.ExecContext(ctx, query,
+		id,
+		meetingID,
+		saluteTaskID,
+		status,
+	)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to create transcription: %w", err)
 	}

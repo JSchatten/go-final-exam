@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/JSchatten/go-final-exam/internal/models"
+	"github.com/google/uuid"
 	"gopkg.in/telebot.v3"
 )
 
@@ -22,104 +25,139 @@ var AllowedAudioExtensions = map[string]bool{
 
 const MaxFileSize = 500 * 1024 * 1024 // 500 МБ
 
-// HandleVoice обрабатывает голосовые сообщения.
 func (b *Bot) HandleVoice(c telebot.Context) error {
 	voice := c.Message().Voice
 	user := c.Sender()
 
-	log.Printf("Получено голосовое сообщение: %d сек, FileID: %s", voice.Duration, voice.FileID)
+	log.Printf("Received voice message: %d sec, FileID: %s", voice.Duration, voice.FileID)
 
-	// 1. Получаем информацию о файле из Telegram
 	file, err := b.Telebot.FileByID(voice.FileID)
 	if err != nil {
-		log.Printf("Не удалось получить информацию о файле: %v", err)
-		return c.Send("Не удалось загрузить аудиофайл.")
+		log.Printf("Failed to get file info: %v", err)
+		return c.Send("Failed to load audio file.")
 	}
 
-	// Защита от path traversal
 	filename := filepath.Base(file.FilePath)
 	if filename == "." || filename == ".." {
-		log.Printf("Invalid filename after Base(): %q", filename)
-		return c.Send("Недопустимый файл.")
+		log.Printf("Invalid filename: %q", filename)
+		return c.Send("Invalid file.")
 	}
 
 	if voice.FileSize > MaxFileSize {
-		log.Printf("Файл слишком большой: %d байт (> %d)", voice.FileSize, MaxFileSize)
-		return c.Send(
-			fmt.Sprintf(
-				"Файл слишком большой: %.1f МБ.\nМаксимальный размер: %d МБ.",
-				float64(voice.FileSize)/(1024*1024), MaxFileSize/(1024*1024),
-			),
-		)
+		return c.Send(fmt.Sprintf(
+			"File too large: %.1f MB. Max: 500 MB.",
+			float64(voice.FileSize)/(1024*1024),
+		))
 	}
 
-	// Проверка расширений
 	ext := strings.ToLower(filepath.Ext(file.FilePath))
 	if !AllowedAudioExtensions[ext] {
 		var formats []string
 		for ext := range AllowedAudioExtensions {
 			formats = append(formats, strings.ToUpper(strings.TrimPrefix(ext, ".")))
 		}
-		log.Printf("Неподдерживаемое расширение файла: %s", ext)
-		return c.Send(fmt.Sprintf("Формат %s не поддерживается.\nПоддерживаемые форматы: %s.", ext, strings.Join(formats, ", ")))
+		return c.Send(fmt.Sprintf("Format %s not supported. Supported: %s.", ext, strings.Join(formats, ", ")))
 	}
 
-	// 2. Подготавливаем путь для сохранения
 	audioDir := b.AudioStoragePath
 	timestamp := time.Now().Unix()
 	audioPath := filepath.Join(audioDir, fmt.Sprintf("voice_%d_%d%s", user.ID, timestamp, filepath.Ext(filename)))
 
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
-		log.Printf("Не удалось создать папку %s: %v", audioDir, err)
-		return c.Send("Ошибка при сохранении аудио.")
+		log.Printf("Failed to create dir %s: %v", audioDir, err)
+		return c.Send("Failed to save audio.")
 	}
 
 	outFile, err := os.Create(audioPath)
 	if err != nil {
-		log.Printf("Не удалось создать файл %s: %v", audioPath, err)
-		return c.Send("Ошибка при сохранении аудио.")
+		log.Printf("Failed to create file %s: %v", audioPath, err)
+		return c.Send("Failed to save audio.")
 	}
 	defer outFile.Close()
 
-	// 3. Скачиваем файл с сервера Telegram
 	fileURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", b.Telebot.Token, file.FilePath)
 	resp, err := http.Get(fileURL)
 	if err != nil {
-		log.Printf("Ошибка при скачивании файла: %v", err)
-		return c.Send("Не удалось скачать аудио.")
+		log.Printf("Failed to download file: %v", err)
+		return c.Send("Failed to download audio.")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("HTTP ошибка при скачивании: %d", resp.StatusCode)
-		return c.Send("Не удалось скачать аудио.")
+		log.Printf("HTTP error on download: %d", resp.StatusCode)
+		return c.Send("Failed to download audio.")
 	}
 
 	_, err = io.Copy(outFile, resp.Body)
 	if err != nil {
-		log.Printf("Ошибка при записи файла: %v", err)
-		return c.Send("Ошибка при сохранении аудио.")
+		log.Printf("Failed to write file: %v", err)
+		return c.Send("Failed to save audio.")
 	}
 
-	log.Printf("Голосовое сообщение успешно сохранено: %s", audioPath)
+	log.Printf("Audio saved: %s", audioPath)
 
-	// Загружаем файл в SaluteSpeech (это не дорого)
+	meeting := &models.Meeting{
+		ID:            uuid.New(),
+		UserID:        user.ID,
+		Title:         fmt.Sprintf("Meeting %s", time.Now().Format("2006-01-02 15:04")),
+		AudioFilePath: &audioPath,
+		Status:        models.StatusProcessing,
+		CreatedAt:     time.Now().UTC(),
+	}
+
+	err = b.MeetingRepo.Create(context.Background(), meeting)
+	if err != nil {
+		log.Printf("Failed to create meeting: %v", err)
+		return c.Send("Failed to save meeting.")
+	}
+
 	requestFileID, err := b.SaluteSpeech.UploadFileByPath(audioPath)
 	if err != nil {
 		log.Printf("Failed to upload file to SaluteSpeech: %v", err)
-		return c.Send("Не удалось отправить файл на распознавание.")
+		setMeetingError(b, context.Background(), meeting, "upload failed")
+		return c.Send("Failed to send file for transcription.")
 	}
 
-	// Создаём задачу распознавания
 	taskID, taskStatus, err := b.SaluteSpeech.CreateRecognitionTask(audioPath, requestFileID)
 	if err != nil {
 		log.Printf("Failed to create recognition task: %v", err)
-		return c.Send("Не удалось создать задачу распознавания.")
+		setMeetingError(b, context.Background(), meeting, "task creation failed")
+		return c.Send("Failed to create transcription task.")
 	}
 
-	log.Printf("Задача на распознавание создана: ID=%s, Status=%s", taskID, taskStatus)
+	log.Printf("Transcription task created: ID=%s, Status=%s", taskID, taskStatus)
 
-	// Конец изменений
+	_, err = b.TranscriptionRepo.Create(context.Background(), meeting.ID, taskID, taskStatus)
+	if err != nil {
+		log.Printf("Failed to create transcription: %v", err)
+		setMeetingError(b, context.Background(), meeting, "transcription failed")
+		return c.Send("Не удалось сохранить задачу распознавания.")
+	}
 
-	return c.Send("Голосовое сообщение получено и отправлено на распознавание", &telebot.SendOptions{ParseMode: "Markdown"})
+	// Обновляем только статус встречи
+	meeting.Status = models.StatusProcessing
+	err = b.MeetingRepo.UpdateMeeting(context.Background(), meeting)
+	if err != nil {
+		log.Printf("Failed to update meeting status: %v", err)
+		// Не фатально
+	}
+
+	message := fmt.Sprintf(
+		"Voice message received and sent for transcription!\n\n"+
+			"Task: `%s`\n"+
+			"Status: *%s*\n\n"+
+			"I will notify you when ready.",
+		taskID,
+		taskStatus,
+	)
+
+	return c.Send(message, &telebot.SendOptions{ParseMode: "Markdown"})
+}
+
+func setMeetingError(b *Bot, ctx context.Context, meeting *models.Meeting, msg string) {
+	log.Println("Error:", msg)
+	meeting.Status = models.StatusFailed
+	meeting.ErrorMessage.Valid = true
+	meeting.ErrorMessage.String = msg
+	_ = b.MeetingRepo.UpdateMeeting(ctx, meeting)
 }
