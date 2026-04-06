@@ -1,8 +1,8 @@
+// internal/worker/transcription_worker.go
 package worker
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -11,7 +11,7 @@ import (
 	"github.com/JSchatten/go-final-exam/internal/repository"
 )
 
-// TranscriptionWorker проверяет статус задач распознавания в SaluteSpeech и обновляет БД.
+// TranscriptionWorker проверяет статус задач распознавания и обновляет статус транскрипции в БД.
 type TranscriptionWorker struct {
 	repo         *repository.TranscriptionRepository
 	saluteSpeech *salutespeech.SaluteSpeechClient
@@ -19,7 +19,10 @@ type TranscriptionWorker struct {
 }
 
 // NewTranscriptionWorker создаёт новый воркер.
-func NewTranscriptionWorker(repo *repository.TranscriptionRepository, saluteSpeech *salutespeech.SaluteSpeechClient) *TranscriptionWorker {
+func NewTranscriptionWorker(
+	repo *repository.TranscriptionRepository,
+	saluteSpeech *salutespeech.SaluteSpeechClient,
+) *TranscriptionWorker {
 	return &TranscriptionWorker{
 		repo:         repo,
 		saluteSpeech: saluteSpeech,
@@ -49,7 +52,7 @@ func (w *TranscriptionWorker) Start(ctx context.Context) error {
 func (w *TranscriptionWorker) pollAndSync(ctx context.Context) error {
 	transcriptions, err := w.repo.GetUnprocessed(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get unprocessed transcriptions: %w", err)
+		return err
 	}
 
 	log.Printf("TranscriptionWorker: found %d unprocessed transcription(s)", len(transcriptions))
@@ -57,7 +60,6 @@ func (w *TranscriptionWorker) pollAndSync(ctx context.Context) error {
 	for _, t := range transcriptions {
 		if err := w.syncTranscription(ctx, t); err != nil {
 			log.Printf("TranscriptionWorker: failed to sync transcription %s: %v", t.ID, err)
-			// Не прерываем цикл — продолжаем обработку других
 		}
 	}
 
@@ -66,40 +68,36 @@ func (w *TranscriptionWorker) pollAndSync(ctx context.Context) error {
 
 // syncTranscription проверяет статус одной транскрипции и обновляет её в БД
 func (w *TranscriptionWorker) syncTranscription(ctx context.Context, t *models.Transcription) error {
-	log.Printf("TranscriptionWorker: syncing task %s (status: %s)", t.SaluteTaskID, t.Status)
-
 	taskResult, err := w.saluteSpeech.CheckTaskStatus(t.SaluteTaskID)
 	if err != nil {
-		return fmt.Errorf("failed to check task status: %w", err)
+		return err
 	}
 
-	// Обновляем статус в БД
-	newStatus := taskResult.Status // NEW, RUNNING, CANCELED, DONE, ERROR
+	newStatus := taskResult.Status
 	var fullText *string
 
 	switch newStatus {
 	case "DONE":
-		// Получаем текст
+		// Получаем результат распознавания
 		recognitionResults, err := w.saluteSpeech.GetRecognitionResult(taskResult.ResponseFileID)
 		if err != nil {
-			return fmt.Errorf("failed to get recognition result: %w", err)
+			return err
 		}
 
 		text := recognitionResults.GetFullNormalizedText()
 		fullText = &text
 
 	case "ERROR", "CANCELED":
-		// Оставим fullText как nil
 		log.Printf("TranscriptionWorker: task %s failed with status %s", t.SaluteTaskID, newStatus)
+		// Оставляем fullText = nil
 	}
 
-	// Обновляем в БД
+	// Обновляем ТОЛЬКО транскрипцию
 	err = w.repo.Update(ctx, t.ID, newStatus, fullText)
 	if err != nil {
-		return fmt.Errorf("failed to update transcription in DB: %w", err)
+		return err
 	}
 
-	log.Printf("TranscriptionWorker: updated transcription %s → Status=%s, HasText=%v", t.ID, newStatus, fullText != nil)
-
+	log.Printf("TranscriptionWorker: updated transcription %v", t)
 	return nil
 }
