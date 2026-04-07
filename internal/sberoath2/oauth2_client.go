@@ -42,7 +42,7 @@ type OAuth2Client struct {
 	tokenURL     string
 
 	// Опциональная функция генерации RqUID
-	// По умолчанию — uuid.New().String()
+	// По умолчанию - uuid.New().String()
 	rquidGenerator func() string
 
 	mu        sync.RWMutex
@@ -50,7 +50,7 @@ type OAuth2Client struct {
 	expiresAt time.Time
 }
 
-// RqUIDGenerator — тип функции для генерации RqUID
+// RqUIDGenerator - тип функции для генерации RqUID
 type RqUIDGenerator func() string
 
 // NewOAuth2Client создаёт новый клиент OAuth2

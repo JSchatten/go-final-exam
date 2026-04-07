@@ -64,7 +64,7 @@ func TestSaluteSpeech_FullRecognitionFlow(t *testing.T) {
 
 	audioPath := getTestAudioPath()
 	if audioPath == "" {
-		t.Skip("Файл ./test/шарлотка.ogg не найден — пропускаем интеграционный тест")
+		t.Skip("Файл ./test/шарлотка.ogg не найден - пропускаем интеграционный тест")
 	}
 
 	// Проверим, что файл существует и не пустой
@@ -118,7 +118,7 @@ func TestSaluteSpeech_FullRecognitionFlow(t *testing.T) {
 		}
 	}
 
-	// После цикла — проверки
+	// После цикла - проверки
 	require.NotNil(t, finalTask, "Финальная задача должна быть получена")
 	require.Equal(t, "DONE", finalTask.Status, "Статус задачи должен быть 'DONE'")
 	require.NotEmpty(t, finalTask.ResponseFileID, "ResponseFileID должен быть заполнен")
@@ -155,7 +155,7 @@ func TestSaluteSpeech_FullRecognitionFlow(t *testing.T) {
 	}
 	if !found {
 		t.Logf("Внимание: ни одно из ожидаемых слов (%v) не найдено в тексте", expectedWords)
-		// Не падаем — качество распознавания может варьироваться
+		// Не падаем - качество распознавания может варьироваться
 	}
 }
 

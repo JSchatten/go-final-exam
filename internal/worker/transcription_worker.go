@@ -106,14 +106,14 @@ func (w *TranscriptionWorker) syncTranscription(ctx context.Context, t *models.T
 		summaryText, err := w.gigaChat.Transcribe(text)
 		if err != nil {
 			log.Printf("TranscriptionWorker: failed to generate summary for meeting %s: %v", t.MeetingID, err)
-			return nil // Не прерываем — ошибка генерации не фатальна
+			return nil // Не прерываем - ошибка генерации не фатальна
 		}
 
 		// Сохраняем выжимку
 		_, err = w.summaryRepo.Create(t.MeetingID, summaryText)
 		if err != nil {
 			log.Printf("TranscriptionWorker: failed to save summary: %v", err)
-			return nil // Ошибка сохранения — логируем, но не падаем
+			return nil // Ошибка сохранения - логируем, но не падаем
 		}
 
 		log.Printf("TranscriptionWorker: generated and saved summary for meeting %s", t.MeetingID)

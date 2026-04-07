@@ -89,7 +89,7 @@ func TestSaluteSpeech_FullRecognitionFlow_DirectUpload(t *testing.T) {
 	require.NoError(t, err)
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "audio/wav") // или "audio/mpeg" — в зависимости от файла
+	req.Header.Set("Content-Type", "audio/wav") // или "audio/mpeg" - в зависимости от файла
 	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}

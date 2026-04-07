@@ -13,14 +13,16 @@ import (
 	"gopkg.in/telebot.v3"
 )
 
-// HandleVoice обрабатывает голосовые сообщения.
-func (b *BotService) HandleVoice(c telebot.Context) error {
-	voice := c.Message().Voice
+// HandleAudio обрабатывает аудиофайлы (MP3, WAV и т.д.)
+func (b *BotService) HandleAudio(c telebot.Context) error {
+	audio := c.Message().Audio
 	user := c.Sender()
 
-	log.Printf("Received voice message: %d sec, FileID: %s", voice.Duration, voice.FileID)
+	log.Printf("AUDIO MEASSEG:\n%+v\n", audio)
 
-	file, err := b.Telebot.FileByID(voice.FileID)
+	log.Printf("Received audio file: %s, Duration: %d sec, FileID: %s", audio.Title, audio.Duration, audio.FileID)
+
+	file, err := b.Telebot.FileByID(audio.FileID)
 	if err != nil {
 		log.Printf("Failed to get file info: %v", err)
 		return c.Send("Failed to load audio file.")
@@ -31,14 +33,15 @@ func (b *BotService) HandleVoice(c telebot.Context) error {
 		return c.Send("Unsupported audio format.")
 	}
 
-	if voice.FileSize > MaxFileSize {
+	if audio.FileSize > MaxFileSize {
 		return c.Send(fmt.Sprintf("File too large. Max: %d MB.", MaxSizeMb))
 	}
 
+	audioDir := b.AudioStoragePath
 	timestamp := time.Now().Unix()
-	audioPath := filepath.Join(b.AudioStoragePath, fmt.Sprintf("voice_%d_%d%s", user.ID, timestamp, ext))
+	audioPath := filepath.Join(audioDir, fmt.Sprintf("audio_%d_%d%s", user.ID, timestamp, ext))
 
-	if err := os.MkdirAll(b.AudioStoragePath, 0755); err != nil {
+	if err := os.MkdirAll(audioDir, 0755); err != nil {
 		log.Printf("Failed to create dir: %v", err)
 		return c.Send("Failed to save audio.")
 	}
@@ -69,16 +72,38 @@ func (b *BotService) HandleVoice(c telebot.Context) error {
 		return c.Send("Failed to save audio.")
 	}
 
-	log.Printf("Voice saved: %s", audioPath)
+	log.Printf("Audio saved: %s", audioPath)
 
 	ctx := b.getCtx(c)
 
+	title := formatAudioTitle(audio)
+
 	// Единая логика обработки
-	err = b.processAudio(ctx, user.ID, audioPath, fmt.Sprintf("Voice message %s", time.Now().Format("2006-01-02 15:04")))
+	err = b.processAudio(ctx, user.ID, audioPath, title)
 	if err != nil {
 		log.Printf("processAudio failed: %v", err)
 		return c.Send("Failed to start transcription.")
 	}
 
-	return c.Send("Сообщение принято для обработки!", &telebot.SendOptions{ParseMode: "Markdown"})
+	return c.Send("Аудиофайл принят для обработки!", &telebot.SendOptions{ParseMode: "Markdown"})
+}
+
+// formatAudioTitle формирует название встречи на основе доступных данных
+func formatAudioTitle(audio *telebot.Audio) string {
+	title := audio.Title
+	performer := audio.Performer
+
+	// Что-то такое, если есть мета
+	switch {
+	case title != "" && performer != "":
+		return fmt.Sprintf("%s - %s", performer, title)
+	case title != "":
+		return title
+	case performer != "":
+		return performer
+	default:
+		// Можно было бы сделать meeting, но пусть он будет для войсов
+		// return fmt.Sprintf("Meeting %s", time.Now().Format("2006-01-02 15:04"))
+		return audio.FileName
+	}
 }

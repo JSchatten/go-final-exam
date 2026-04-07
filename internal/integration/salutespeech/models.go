@@ -15,13 +15,13 @@ type UploadResponse struct {
 	} `json:"result"`
 }
 
-// AsyncTaskResponse — обновлён под новый ответ
+// AsyncTaskResponse - обновлён под новый ответ
 type AsyncTaskResponse struct {
 	Status int        `json:"status"` // HTTP-статус как число (200)
 	Result TaskResult `json:"result"`
 }
 
-// TaskResult — данные созданной задачи
+// TaskResult - данные созданной задачи
 type TaskResult struct {
 	ID string `json:"id"`
 	// статус задачи: "NEW, RUNNING, CANCELED, DONE, ERROR
@@ -67,18 +67,18 @@ func (t *TaskResult) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// RecognitionResultResponse — структура для ответа с текстом
+// RecognitionResultResponse - структура для ответа с текстом
 type RecognitionResultResponse struct {
 	Text string `json:"text"` // Результат приходит как plain text в теле
 }
 
-// RecognitionResult — упрощённая модель результата распознавания
+// RecognitionResult - упрощённая модель результата распознавания
 type RecognitionResult struct {
 	Text           string `json:"text"`
 	NormalizedText string `json:"normalized_text"`
 }
 
-// RecognitionResponse — массив результатов (один элемент = один сегмент)
+// RecognitionResponse - массив результатов (один элемент = один сегмент)
 type RecognitionResponse []RecognitionResult
 
 // GetFullText возвращает объединённый обычный текст всех результатов через пробел.
@@ -93,7 +93,7 @@ func (r RecognitionResponse) GetFullText() string {
 }
 
 // GetFullNormalizedText возвращает объединённый нормализованный текст всех результатов,
-// каждый сегмент — с новой строки.
+// каждый сегмент - с новой строки.
 func (r RecognitionResponse) GetFullNormalizedText() string {
 	var parts []string
 	for _, res := range r {

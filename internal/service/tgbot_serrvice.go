@@ -15,6 +15,18 @@ import (
 	"github.com/JSchatten/go-final-exam/internal/repository"
 )
 
+const (
+	MaxSizeMb   = 500
+	MaxFileSize = MaxSizeMb * 1024 * 1024 // 500 МБ
+)
+
+var AllowedAudioExtensions = map[string]bool{
+	".ogg": true,
+	".oga": true,
+	".mp3": true,
+	".wav": true,
+}
+
 // BotService представляет Telegram-бота и его зависимости.
 type BotService struct {
 	Telebot           *telebot.Bot
@@ -69,21 +81,6 @@ func (b *BotService) HandleChat(c telebot.Context) error {
 		return c.Send("Не удалось получить ответ от GigaChat.")
 	}
 	return c.Send(response)
-}
-
-// HandleAudio обрабатывает аудиофайлы.
-func (b *BotService) HandleAudio(c telebot.Context) error {
-	transcript := "[Транскрипция аудиофайла будет здесь]"
-
-	summaryPrompt := fmt.Sprintf("Сделай краткую выжимку из следующего текста:\n\n%s", transcript)
-	summary, err := b.GigaChat.SendMessage(summaryPrompt)
-	if err != nil {
-		log.Printf("Failed to get summary from GigaChat: %v", err)
-		summary = "Не удалось сгенерировать краткую выжимку."
-	}
-
-	result := fmt.Sprintf("Транскрипция:\n%s\n\nКраткая выжимка:\n%s", transcript, summary)
-	return c.Send(result)
 }
 
 // HandleText обрабатывает текстовые сообщения.
