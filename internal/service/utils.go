@@ -12,13 +12,13 @@ import (
 // TODO: надо выделить рядом с константами
 func formatStatus(status string) string {
 	switch status {
-	case models.StatusUploaded:
+	case models.MeetingStatusUploaded:
 		return "Загружено"
-	case models.StatusProcessing:
+	case models.MeetingStatusProcessing:
 		return "Обрабатывается"
-	case models.StatusCompleted:
+	case models.MeetingStatusCompleted:
 		return "Готово"
-	case models.StatusFailed:
+	case models.MeetingStatusFailed:
 		return "Ошибка"
 	default:
 		return cases.Title(language.Und).String(status)

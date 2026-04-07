@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	StatusUploaded   = "uploaded"
-	StatusProcessing = "processing"
-	StatusCompleted  = "completed"
-	StatusFailed     = "failed"
+	MeetingStatusUploaded   = "uploaded"
+	MeetingStatusProcessing = "processing"
+	MeetingStatusCompleted  = "completed"
+	MeetingStatusFailed     = "failed"
 )
 
 // Transcription - результат распознавания речи (SaluteSpeech)

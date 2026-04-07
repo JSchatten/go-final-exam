@@ -37,6 +37,7 @@ type BotService struct {
 	MeetingRepo       *repository.MeetingRepository
 	TranscriptionRepo *repository.TranscriptionRepository
 	SummaryRepo       *repository.SummaryRepository
+	ChatHistoryRepo   *repository.ChatHistoryRepository
 	AudioStoragePath  string
 }
 
@@ -57,6 +58,7 @@ func NewBotService(
 		MeetingRepo:       repository.NewMeetingRepository(db),
 		TranscriptionRepo: repository.NewTranscriptionRepository(db),
 		SummaryRepo:       repository.NewSummaryRepository(db),
+		ChatHistoryRepo:   repository.NewChatHistoryRepository(db),
 		AudioStoragePath:  audioStoragePath,
 	}
 }
@@ -71,15 +73,25 @@ func (b *BotService) getCtx(c telebot.Context) context.Context {
 
 // HandleChat обрабатывает команду /chat.
 func (b *BotService) HandleChat(c telebot.Context) error {
-	prompt := c.Text()[6:]
+	prompt := strings.TrimSpace(c.Text()[5:])
 	if prompt == "" {
 		return c.Send("Напишите запрос после команды. Пример: /chat Как дела?")
 	}
+
 	response, err := b.GigaChat.SendMessage(prompt)
 	if err != nil {
 		log.Printf("Failed to get response from GigaChat: %v", err)
 		return c.Send("Не удалось получить ответ от GigaChat.")
 	}
+
+	// Сохраняем в историю
+	ctx := b.getCtx(c)
+	err = b.ChatHistoryRepo.Create(ctx, c.Sender().ID, prompt, response)
+	if err != nil {
+		log.Printf("Failed to save chat history: %v", err)
+		// Не фатально — продолжаем
+	}
+
 	return c.Send(response)
 }
 

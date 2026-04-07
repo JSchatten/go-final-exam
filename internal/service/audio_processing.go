@@ -19,7 +19,7 @@ func (b *BotService) processAudio(ctx context.Context, userID int64, audioPath, 
 		UserID:        userID,
 		Title:         title,
 		AudioFilePath: &audioPath,
-		Status:        models.StatusUploaded,
+		Status:        models.MeetingStatusUploaded,
 		CreatedAt:     time.Now().UTC(),
 	}
 
@@ -52,7 +52,7 @@ func (b *BotService) processAudio(ctx context.Context, userID int64, audioPath, 
 	}
 
 	// Обновляем статус встречи
-	meeting.Status = models.StatusProcessing
+	meeting.Status = models.MeetingStatusProcessing
 	err = b.MeetingRepo.UpdateMeeting(ctx, meeting)
 	if err != nil {
 		log.Printf("Warning: failed to update meeting status: %v", err)
@@ -63,7 +63,7 @@ func (b *BotService) processAudio(ctx context.Context, userID int64, audioPath, 
 
 func setMeetingError(b *BotService, ctx context.Context, meeting *models.Meeting, msg string) {
 	log.Println("Error:", msg)
-	meeting.Status = models.StatusFailed
+	meeting.Status = models.MeetingStatusFailed
 	meeting.ErrorMessage.Valid = true
 	meeting.ErrorMessage.String = msg
 	_ = b.MeetingRepo.UpdateMeeting(ctx, meeting)
