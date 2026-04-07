@@ -25,16 +25,16 @@ func (b *BotService) HandleAudio(c telebot.Context) error {
 	file, err := b.Telebot.FileByID(audio.FileID)
 	if err != nil {
 		log.Printf("Failed to get file info: %v", err)
-		return c.Send("Failed to load audio file.")
+		return c.Reply("Failed to load audio file.")
 	}
 
 	ext := strings.ToLower(filepath.Ext(file.FilePath))
 	if !AllowedAudioExtensions[ext] {
-		return c.Send("Unsupported audio format.")
+		return c.Reply("Unsupported audio format.")
 	}
 
 	if audio.FileSize > MaxFileSize {
-		return c.Send(fmt.Sprintf("File too large. Max: %d MB.", MaxSizeMb))
+		return c.Reply(fmt.Sprintf("File too large. Max: %d MB.", MaxSizeMb))
 	}
 
 	audioDir := b.AudioStoragePath
@@ -43,13 +43,13 @@ func (b *BotService) HandleAudio(c telebot.Context) error {
 
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
 		log.Printf("Failed to create dir: %v", err)
-		return c.Send("Failed to save audio.")
+		return c.Reply("Failed to save audio.")
 	}
 
 	outFile, err := os.Create(audioPath)
 	if err != nil {
 		log.Printf("Failed to create file: %v", err)
-		return c.Send("Failed to save audio.")
+		return c.Reply("Failed to save audio.")
 	}
 	defer outFile.Close()
 
@@ -57,19 +57,19 @@ func (b *BotService) HandleAudio(c telebot.Context) error {
 	resp, err := http.Get(fileURL)
 	if err != nil {
 		log.Printf("Failed to download file: %v", err)
-		return c.Send("Failed to download audio.")
+		return c.Reply("Failed to download audio.")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("HTTP error on download: %d", resp.StatusCode)
-		return c.Send("Failed to download audio.")
+		return c.Reply("Failed to download audio.")
 	}
 
 	_, err = io.Copy(outFile, resp.Body)
 	if err != nil {
 		log.Printf("Failed to write file: %v", err)
-		return c.Send("Failed to save audio.")
+		return c.Reply("Failed to save audio.")
 	}
 
 	log.Printf("Audio saved: %s", audioPath)
@@ -82,10 +82,10 @@ func (b *BotService) HandleAudio(c telebot.Context) error {
 	err = b.processAudio(ctx, user.ID, audioPath, title)
 	if err != nil {
 		log.Printf("processAudio failed: %v", err)
-		return c.Send("Failed to start transcription.")
+		return c.Reply("Failed to start transcription.")
 	}
 
-	return c.Send("Аудиофайл принят для обработки!", &telebot.SendOptions{ParseMode: "Markdown"})
+	return c.Reply("Аудиофайл принят для обработки!", &telebot.SendOptions{ParseMode: "Markdown"})
 }
 
 // formatAudioTitle формирует название встречи на основе доступных данных

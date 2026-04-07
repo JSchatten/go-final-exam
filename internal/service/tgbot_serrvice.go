@@ -75,13 +75,13 @@ func (b *BotService) getCtx(c telebot.Context) context.Context {
 func (b *BotService) HandleChat(c telebot.Context) error {
 	prompt := strings.TrimSpace(c.Text()[5:])
 	if prompt == "" {
-		return c.Send("Напишите запрос после команды. Пример: /chat Как дела?")
+		return c.Reply("Напишите запрос после команды. Пример: /chat Как дела?")
 	}
 
 	response, err := b.GigaChat.SendMessage(prompt)
 	if err != nil {
 		log.Printf("Failed to get response from GigaChat: %v", err)
-		return c.Send("Не удалось получить ответ от GigaChat.")
+		return c.Reply("Не удалось получить ответ от GigaChat.")
 	}
 
 	// Сохраняем в историю
@@ -92,7 +92,7 @@ func (b *BotService) HandleChat(c telebot.Context) error {
 		// Не фатально — продолжаем
 	}
 
-	return c.Send(response)
+	return c.Reply(response)
 }
 
 // HandleText обрабатывает текстовые сообщения.
@@ -110,7 +110,8 @@ func (b *BotService) HandleText(c telebot.Context) error {
 Также вы можете отправить голосовое сообщение или аудиофайл для транскрипции.
 	`
 
-	return c.Send(strings.TrimSpace(helpMessage), &telebot.SendOptions{
+	// return c.Reply(strings.TrimSpace(helpMessage), &telebot.SendOptions{
+	return c.Reply(strings.TrimSpace(helpMessage), &telebot.SendOptions{
 		ParseMode: "Markdown",
 	})
 }
@@ -192,7 +193,7 @@ func (b *BotService) HandleStart(c telebot.Context) error {
 		message = fmt.Sprintf("С возвращением, %s!\nРад снова тебя видеть.", user.FirstName)
 	}
 
-	return c.Send(message)
+	return c.Reply(message)
 }
 
 // /get 1
@@ -202,26 +203,26 @@ func (b *BotService) HandleGet(c telebot.Context) error {
 	args := c.Args()
 
 	if len(args) == 0 {
-		return c.Send("Укажите номер встречи. Пример: /get 1")
+		return c.Reply("Укажите номер встречи. Пример: /get 1")
 	}
 
 	index, err := strconv.Atoi(args[0])
 	if err != nil {
-		return c.Send("Неверный формат номера. Укажите число.")
+		return c.Reply("Неверный формат номера. Укажите число.")
 	}
 
 	if index < 1 {
-		return c.Send("Номер должен быть больше 0.")
+		return c.Reply("Номер должен быть больше 0.")
 	}
 
 	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
 	if err != nil {
 		log.Printf("Failed to fetch meetings: %v", err)
-		return c.Send("Не удалось загрузить список встреч.")
+		return c.Reply("Не удалось загрузить список встреч.")
 	}
 
 	if index > len(meetings) {
-		return c.Send(fmt.Sprintf("Нет встречи с номером %d. Доступно встреч: %d.", index, len(meetings)))
+		return c.Reply(fmt.Sprintf("Нет встречи с номером %d. Доступно встреч: %d.", index, len(meetings)))
 	}
 
 	meeting := meetings[index-1]
@@ -229,11 +230,11 @@ func (b *BotService) HandleGet(c telebot.Context) error {
 	fullMeeting, err := b.MeetingRepo.GetByUserAndID(ctx, user.ID, meeting.ID)
 	if err != nil {
 		log.Printf("Failed to load full meeting %s: %v", meeting.ID, err)
-		return c.Send("Не удалось загрузить содержимое встречи.")
+		return c.Reply("Не удалось загрузить содержимое встречи.")
 	}
 
 	if fullMeeting == nil {
-		return c.Send("Встреча не найдена или доступ запрещён.")
+		return c.Reply("Встреча не найдена или доступ запрещён.")
 	}
 
 	var result strings.Builder
@@ -255,7 +256,7 @@ func (b *BotService) HandleGet(c telebot.Context) error {
 		result.WriteString("*Транскрипция:* ещё не готова.\n\n")
 	}
 
-	return c.Send(result.String(), &telebot.SendOptions{ParseMode: "Markdown"})
+	return c.Reply(result.String(), &telebot.SendOptions{ParseMode: "Markdown"})
 }
 
 // HandleFind обрабатывает команду /find "запрос"
@@ -265,12 +266,12 @@ func (b *BotService) HandleFind(c telebot.Context) error {
 	args := c.Args()
 
 	if len(args) == 0 {
-		return c.Send("Введите запрос для поиска.\nПример: /find встреча с клиентом")
+		return c.Reply("Введите запрос для поиска.\nПример: /find встреча с клиентом")
 	}
 
 	query := strings.TrimSpace(strings.Join(args, " "))
 	if query == "" {
-		return c.Send("Запрос не может быть пустым.")
+		return c.Reply("Запрос не может быть пустым.")
 	}
 
 	log.Printf("User %d searching for: %q", user.ID, query)
@@ -278,11 +279,11 @@ func (b *BotService) HandleFind(c telebot.Context) error {
 	meetings, err := b.MeetingRepo.SearchByUser(ctx, user.ID, query)
 	if err != nil {
 		log.Printf("Search failed for user %d: %v", user.ID, err)
-		return c.Send("Произошла ошибка при поиске.")
+		return c.Reply("Произошла ошибка при поиске.")
 	}
 
 	if len(meetings) == 0 {
-		return c.Send(fmt.Sprintf("Ничего не найдено по запросу:\n`%s`", escapeMarkdown(query)),
+		return c.Reply(fmt.Sprintf("Ничего не найдено по запросу:\n`%s`", escapeMarkdown(query)),
 			&telebot.SendOptions{ParseMode: "Markdown"})
 	}
 
@@ -307,7 +308,7 @@ func (b *BotService) HandleFind(c telebot.Context) error {
 		strings.Join(items, "\n\n"),
 	)
 
-	return c.Send(message, &telebot.SendOptions{ParseMode: "Markdown"})
+	return c.Reply(message, &telebot.SendOptions{ParseMode: "Markdown"})
 }
 
 // HandleList обрабатывает команду /list.
@@ -318,11 +319,11 @@ func (b *BotService) HandleList(c telebot.Context) error {
 	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
 	if err != nil {
 		log.Printf("Failed to fetch meetings for user %d: %v", user.ID, err)
-		return c.Send("Не удалось загрузить список встреч.")
+		return c.Reply("Не удалось загрузить список встреч.")
 	}
 
 	if len(meetings) == 0 {
-		return c.Send("У вас пока нет сохранённых встреч.\nОтправьте голосовое сообщение, и оно появится здесь.")
+		return c.Reply("У вас пока нет сохранённых встреч.\nОтправьте голосовое сообщение, и оно появится здесь.")
 	}
 
 	var items []string
@@ -345,5 +346,5 @@ func (b *BotService) HandleList(c telebot.Context) error {
 		strings.Join(items, "\n\n"),
 	)
 
-	return c.Send(message, &telebot.SendOptions{ParseMode: "Markdown"})
+	return c.Reply(message, &telebot.SendOptions{ParseMode: "Markdown"})
 }
