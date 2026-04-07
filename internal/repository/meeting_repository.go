@@ -73,33 +73,23 @@ func (r *MeetingRepository) UpdateMeeting(ctx context.Context, meeting *models.M
 	return nil
 }
 
-// UpdateStatus обновляет статус встречи
-func (r *MeetingRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status string) error {
+// UpdateStatusWithError обновляет статус встречи и опционально сообщение об ошибке.
+// Если errorMessage пуст, в поле error_message будет записано NULL.
+func (r *MeetingRepository) UpdateStatusWithError(ctx context.Context, id uuid.UUID, status, errorMessage string) error {
 	const query = `
 		UPDATE meetings
-		SET status = $2
+		SET status = $2, error_message = $3
 		WHERE id = $1
 	`
 
-	_, err := r.db.Conn.ExecContext(ctx, query, id, status)
-	if err != nil {
-		return fmt.Errorf("failed to update meeting status: %w", err)
+	var errorMsg *string
+	if errorMessage != "" {
+		errorMsg = &errorMessage
 	}
-
-	return nil
-}
-
-// UpdateError обновляет сообщение об ошибке
-func (r *MeetingRepository) UpdateError(ctx context.Context, id uuid.UUID, message string) error {
-	const query = `
-		UPDATE meetings
-		SET error_message = $2
-		WHERE id = $1
-	`
-
-	_, err := r.db.Conn.ExecContext(ctx, query, id, message)
+	// Если errorMessage пустая — остаётся nil, в БД будет NULL
+	_, err := r.db.Conn.ExecContext(ctx, query, id, status, errorMsg)
 	if err != nil {
-		return fmt.Errorf("failed to update error message: %w", err)
+		return fmt.Errorf("failed to update meeting status and error: %w", err)
 	}
 
 	return nil

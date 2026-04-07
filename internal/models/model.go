@@ -14,6 +14,14 @@ const (
 	MeetingStatusFailed     = "failed"
 )
 
+// Человекочитаемые сообщения об ошибках
+var (
+	ErrorUploadFailed        = "Не удалось загрузить аудиофайл в сервис распознавания"
+	ErrorTaskCreationFailed  = "Не удалось создать задачу распознавания"
+	ErrorTranscriptionFailed = "Ошибка при распознавании речи"
+	ErrorSummaryFailed       = "Не удалось сгенерировать краткую выжимку"
+)
+
 // Transcription - результат распознавания речи (SaluteSpeech)
 type Transcription struct {
 	ID           uuid.UUID `json:"id" db:"id"`

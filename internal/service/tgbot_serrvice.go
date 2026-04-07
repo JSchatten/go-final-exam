@@ -73,7 +73,7 @@ func (b *BotService) getCtx(c telebot.Context) context.Context {
 
 // HandleChat обрабатывает команду /chat.
 func (b *BotService) HandleChat(c telebot.Context) error {
-	prompt := strings.TrimSpace(c.Text()[5:])
+	prompt := c.Message().Payload // strings.TrimSpace(c.Text()[5:])
 	if prompt == "" {
 		return c.Reply("Напишите запрос после команды. Пример: /chat Как дела?")
 	}
@@ -92,7 +92,7 @@ func (b *BotService) HandleChat(c telebot.Context) error {
 		// Не фатально — продолжаем
 	}
 
-	return c.Reply(response)
+	return c.Reply(response, &telebot.SendOptions{ParseMode: "Markdown"})
 }
 
 // HandleText обрабатывает текстовые сообщения.
