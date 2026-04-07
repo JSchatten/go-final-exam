@@ -27,6 +27,26 @@ var AllowedAudioExtensions = map[string]bool{
 	".wav": true,
 }
 
+var (
+	MenuInBot = &telebot.ReplyMarkup{ResizeKeyboard: true}
+	// Paginator = &telebot.ReplyMarkup{}
+	Selector = &telebot.ReplyMarkup{}
+
+	BtnStart = MenuInBot.Text("start")
+	btnHelp  = MenuInBot.Text("help")
+	btnFind  = MenuInBot.Text("Find")
+
+	// Inline buttons.
+	//
+	// Pressing it will cause the client to
+	// send the bot a callback.
+	//
+	// Make sure Unique stays unique as per button kind
+	// since it's required for callback routing to work.
+	//
+
+)
+
 // BotService представляет Telegram-бота и его зависимости.
 type BotService struct {
 	Telebot           *telebot.Bot
@@ -49,6 +69,13 @@ func NewBotService(
 	db *repository.DB,
 	audioStoragePath string,
 ) *BotService {
+
+	MenuInBot.Reply(
+		MenuInBot.Row(btnHelp),
+		MenuInBot.Row(BtnStart),
+		MenuInBot.Row(btnFind),
+	)
+
 	return &BotService{
 		Telebot:           bot,
 		GigaChat:          gigaChat,
@@ -111,7 +138,7 @@ func (b *BotService) HandleText(c telebot.Context) error {
 	`
 
 	// return c.Reply(strings.TrimSpace(helpMessage), &telebot.SendOptions{
-	return c.Reply(strings.TrimSpace(helpMessage), &telebot.SendOptions{
+	return c.Send(strings.TrimSpace(helpMessage), &telebot.SendOptions{
 		ParseMode: "Markdown",
 	})
 }
@@ -193,7 +220,9 @@ func (b *BotService) HandleStart(c telebot.Context) error {
 		message = fmt.Sprintf("С возвращением, %s!\nРад снова тебя видеть.", user.FirstName)
 	}
 
-	return c.Reply(message)
+	return c.Reply(message, &telebot.SendOptions{
+		ReplyMarkup: MenuInBot,
+	})
 }
 
 // /get 1
@@ -315,6 +344,11 @@ func (b *BotService) HandleFind(c telebot.Context) error {
 func (b *BotService) HandleList(c telebot.Context) error {
 	ctx := b.getCtx(c)
 	user := c.Sender()
+	data := c.Callback()
+	fmt.Printf("data %+v", data)
+	if data != nil {
+		fmt.Printf("data %+v", data.Data)
+	}
 
 	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
 	if err != nil {
@@ -346,5 +380,37 @@ func (b *BotService) HandleList(c telebot.Context) error {
 		strings.Join(items, "\n\n"),
 	)
 
-	return c.Reply(message, &telebot.SendOptions{ParseMode: "Markdown"})
+	Paginator := &telebot.ReplyMarkup{}
+	btnPrev := Paginator.Data("⬅", "prev") // Create a callback data button
+	btnNext := Paginator.Data("➡", "next")
+	btnOne := Selector.Data("1", "first", "")
+	btnTwo := Selector.Data("2", "second", "")
+	btnThree := Selector.Data("3", "third", "")
+	btnFour := Selector.Data("4", "fourth", "")
+	btnFive := Selector.Data("5", "fived", "")
+
+	// Handler for the button
+	b.Telebot.Handle("\ffirst", func(c telebot.Context) error {
+		// Access the callback data (in this case "12345")
+		data := c.Callback().Data
+
+		// Respond to the callback
+		// return c.Respond(&telebot.CallbackResponse{
+		// 	Text: "Product " + data + " selected",
+		// })
+
+		Message := "Product " + data + " selected"
+
+		return c.Reply(Message, &telebot.SendOptions{ParseMode: "Markdown"})
+	})
+
+	Paginator.Inline(
+		Paginator.Row(btnPrev, btnNext),
+		Paginator.Row(btnOne, btnTwo, btnThree, btnFour, btnFive),
+	)
+
+	return c.Reply(message, &telebot.SendOptions{
+		ParseMode:   "Markdown",
+		ReplyMarkup: Paginator,
+	})
 }

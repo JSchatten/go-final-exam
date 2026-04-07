@@ -78,7 +78,10 @@ func main() {
 
 	// === Настраиваем маршруты (как в Gin) ===
 
-	telebotInstance.Handle("/start", bot.HandleStart)
+	// telebotInstance.Handle("/start", bot.HandleStart)
+	telebotInstance.Handle(&service.BtnStart, bot.HandleStart)
+	// telebotInstance.Handle(&service.MenuInBot, bot.HandleStart)
+
 	telebotInstance.Handle("/list", bot.HandleList)
 	telebotInstance.Handle("/get", bot.HandleGet)
 	telebotInstance.Handle("/find", bot.HandleFind)
