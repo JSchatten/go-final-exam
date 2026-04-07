@@ -96,9 +96,23 @@ func (b *BotService) HandleChat(c telebot.Context) error {
 }
 
 // HandleText обрабатывает текстовые сообщения.
+// HandleText обрабатывает любые текстовые сообщения, не являющиеся командами.
 func (b *BotService) HandleText(c telebot.Context) error {
-	text := c.Text()
-	return c.Send(fmt.Sprintf("Вы написали: %q (текст пока не обрабатывается)", text))
+	helpMessage := `
+Доступные команды:
+
+/start – регистрация пользователя
+/list – список сохранённых встреч
+/get [номер] – получить текст встречи
+/find [запрос] – поиск встречи по ключевым словам
+/chat [вопрос] – задать вопрос GigaChat
+
+Также вы можете отправить голосовое сообщение или аудиофайл для транскрипции.
+	`
+
+	return c.Send(strings.TrimSpace(helpMessage), &telebot.SendOptions{
+		ParseMode: "Markdown",
+	})
 }
 
 // notifyUserOfFailure отправляет пользователю сообщение о сбое обработки
