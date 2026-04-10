@@ -59,6 +59,7 @@ type BotService struct {
 	SummaryRepo       *repository.SummaryRepository
 	ChatHistoryRepo   *repository.ChatHistoryRepository
 	AudioStoragePath  string
+	MenuTest          *telebot.ReplyMarkup
 }
 
 // NewBotService создаёт новый экземпляр бота с готовыми зависимостями
@@ -70,13 +71,11 @@ func NewBotService(
 	audioStoragePath string,
 ) *BotService {
 
-	MenuInBot.Reply(
-		MenuInBot.Row(btnHelp),
-		MenuInBot.Row(BtnStart),
-		MenuInBot.Row(btnFind),
-	)
+	MenuTest := &telebot.ReplyMarkup{ResizeKeyboard: true}
 
-	return &BotService{
+	btnTestInfo := MenuInBot.Text("TestInfo")
+
+	bs := &BotService{
 		Telebot:           bot,
 		GigaChat:          gigaChat,
 		SaluteSpeech:      saluteSpeech,
@@ -87,7 +86,14 @@ func NewBotService(
 		SummaryRepo:       repository.NewSummaryRepository(db),
 		ChatHistoryRepo:   repository.NewChatHistoryRepository(db),
 		AudioStoragePath:  audioStoragePath,
+		MenuTest:          MenuTest,
 	}
+
+	bs.Telebot.Handle(&btnTestInfo, func(c telebot.Context) error {
+		return c.Reply("TestInfo", MenuTest)
+	})
+
+	return bs
 }
 
 // getCtx безопасно извлекает контекст из telebot.Context или возвращает background

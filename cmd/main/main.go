@@ -81,7 +81,7 @@ func main() {
 	// telebotInstance.Handle("/start", bot.HandleStart)
 	// https://deepwiki.com/go-telebot/telebot/6.1-reply-markup
 	telebotInstance.Handle(&service.BtnStart, bot.HandleStart)
-	// telebotInstance.Handle(&service.MenuInBot, bot.HandleStart)
+	// telebotInstance.Handle(*bot.MenuTest, bot.HandleTest)
 
 	telebotInstance.Handle("/list", bot.HandleList)
 	telebotInstance.Handle("/get", bot.HandleGet)
