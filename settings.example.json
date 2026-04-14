@@ -1,0 +1,22 @@
+{
+  "logLevel": "debug",
+  "telegram_token": "your_telegram_token",
+  "gigachat": {
+    "client_id": "giga_client_id",
+    "scope": "GIGACHAT_API_PERS",
+    "auth_key": "your_auth_key"
+  },
+  "salutespeech": {
+    "client_id": "speech_client_id",
+    "scope": "SALUTESPEECH_API",
+    "auth_key": "your_speech_key"
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "user": "app_user",
+    "password": "app_pass",
+    "name": "meetings_db"
+  },
+  "audio_storage_path": "./audio"
+}

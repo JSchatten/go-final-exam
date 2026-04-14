@@ -1,0 +1,27 @@
+services:
+  db_postgresql:
+    image: postgres:16.8-alpine3.20
+    restart: unless-stopped
+    env_file:
+      - ./.postgresql.env.example
+    ports:
+      - 5678:5432
+    # volumes:
+      # - ./vdata/db_posgresql_store:/var/lib/postgresql/data
+    networks:
+      - diploma-network
+
+  db_pg_admin:
+    image: dpage/pgadmin4:9
+    restart: unless-stopped
+    env_file:
+      - ./.postgresql.env.example
+    ports:
+      - 5680:80
+    # volumes:
+      # - ./vdata/db_pgadmin_store:/mounted_store
+    networks:
+      - diploma-network
+
+networks:
+  diploma-network:

@@ -24,9 +24,63 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
-.env
+# Config files
+config.json
+settings.json
+*.env
 
 # Editor/IDE
 # .idea/
 # .vscode/
+
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+# coverage html
+*.html
+
+# Binaries
+cmd/agent/main
+cmd/agent/agent
+cmd/server/main
+cmd/server/server
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# IDEs directories
+.idea
+.vscode
+
+# binary test
+metricstest
+metricstest_v2
+
+# binary output build
+build/
+
+# Air
+tmp/
+
+# logs from stdout
+*.log
+*.txt
+
+# generated files
+# Tests
+go_test/
+# Docs
+docs/
+
+# audiostorage
+audio/*

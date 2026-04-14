@@ -1,0 +1,153 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+
+	"github.com/JSchatten/go-final-exam/internal/models"
+	"github.com/google/uuid"
+)
+
+type TranscriptionRepository struct {
+	db *DB
+}
+
+func NewTranscriptionRepository(db *DB) *TranscriptionRepository {
+	return &TranscriptionRepository{db: db}
+}
+
+// Create создает новую запись транскрипции с начальным статусом и ID задачи SaluteSpeech
+func (r *TranscriptionRepository) Create(ctx context.Context, meetingID uuid.UUID, saluteTaskID string, status string) (uuid.UUID, error) {
+	id := uuid.New()
+	const query = `
+		INSERT INTO transcriptions (id, meeting_id, salute_task_id, status)
+		VALUES ($1, $2, $3, $4)
+	`
+
+	_, err := r.db.Conn.ExecContext(ctx, query,
+		id,
+		meetingID,
+		saluteTaskID,
+		status,
+	)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to create transcription: %w", err)
+	}
+
+	return id, nil
+}
+
+// Update обновляет транскрипцию: статус, текст и время обработки
+func (r *TranscriptionRepository) Update(ctx context.Context, id uuid.UUID, status string, fullText *string) error {
+	const query = `
+		UPDATE transcriptions
+		SET status = $1, full_text = $2, processed_at = $3
+		WHERE id = $4
+	`
+
+	_, err := r.db.Conn.ExecContext(ctx, query, status, fullText, time.Now().UTC(), id)
+	if err != nil {
+		return fmt.Errorf("failed to update transcription: %w", err)
+	}
+
+	return nil
+}
+
+// GetByMeetingID возвращает транскрипцию по ID встречи
+func (r *TranscriptionRepository) GetByMeetingID(ctx context.Context, meetingID uuid.UUID) (*models.Transcription, error) {
+	const query = `
+		SELECT id, meeting_id, salute_task_id, status, full_text, processed_at
+		FROM transcriptions
+		WHERE meeting_id = $1
+		LIMIT 1
+	`
+
+	var transcription models.Transcription
+	err := r.db.Conn.QueryRowContext(ctx, query, meetingID).Scan(
+		&transcription.ID,
+		&transcription.MeetingID,
+		&transcription.SaluteTaskID,
+		&transcription.Status,
+		&transcription.FullText,
+		&transcription.ProcessedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("transcription not found for meeting %s", meetingID)
+		}
+		return nil, fmt.Errorf("failed to get transcription from DB: %w", err)
+	}
+
+	return &transcription, nil
+}
+
+// GetByID возвращает транскрипцию по ID
+func (r *TranscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Transcription, error) {
+	const query = `
+		SELECT id, meeting_id, salute_task_id, status, full_text, processed_at
+		FROM transcriptions
+		WHERE id = $1
+		LIMIT 1
+	`
+
+	var transcription models.Transcription
+	err := r.db.Conn.QueryRowContext(ctx, query, id).Scan(
+		&transcription.ID,
+		&transcription.MeetingID,
+		&transcription.SaluteTaskID,
+		&transcription.Status,
+		&transcription.FullText,
+		&transcription.ProcessedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("transcription with ID %s not found", id)
+		}
+		return nil, fmt.Errorf("failed to get transcription by ID: %w", err)
+	}
+
+	return &transcription, nil
+}
+
+// GetUnprocessed возвращает все транскрипции со статусом NEW или RUNNING
+func (r *TranscriptionRepository) GetUnprocessed(ctx context.Context) ([]*models.Transcription, error) {
+	// статусы и так uppercase, но по-хорошему это вообще в списки надо офрмить на уровне БД
+	const query = `
+		SELECT id, meeting_id, salute_task_id, status, full_text, processed_at
+		FROM transcriptions
+		WHERE status = 'NEW' OR status = 'RUNNING'
+		ORDER BY processed_at ASC`
+
+	rows, err := r.db.Conn.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unprocessed transcriptions: %w", err)
+	}
+	defer rows.Close()
+
+	var transcriptions []*models.Transcription
+	for rows.Next() {
+		var t models.Transcription
+		err := rows.Scan(
+			&t.ID,
+			&t.MeetingID,
+			&t.SaluteTaskID,
+			&t.Status,
+			&t.FullText,
+			&t.ProcessedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan transcription row: %w", err)
+		}
+		transcriptions = append(transcriptions, &t)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return transcriptions, nil
+}
