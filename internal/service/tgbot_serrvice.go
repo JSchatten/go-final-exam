@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
+
 	"strconv"
 	"strings"
 
@@ -11,8 +11,10 @@ import (
 
 	"github.com/JSchatten/go-final-exam/internal/integration/gigachat"
 	"github.com/JSchatten/go-final-exam/internal/integration/salutespeech"
+	"github.com/JSchatten/go-final-exam/internal/logger"
 	"github.com/JSchatten/go-final-exam/internal/models"
 	"github.com/JSchatten/go-final-exam/internal/repository"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -49,6 +51,7 @@ var (
 
 // BotService представляет Telegram-бота и его зависимости.
 type BotService struct {
+	Logger            zerolog.Logger
 	Telebot           *telebot.Bot
 	GigaChat          *gigachat.GigaChatClient
 	SaluteSpeech      *salutespeech.SaluteSpeechClient
@@ -76,6 +79,7 @@ func NewBotService(
 	btnTestInfo := MenuInBot.Text("TestInfo")
 
 	bs := &BotService{
+		Logger:            logger.WithContext(context.Background()).With().Str("component", "BotService").Logger(),
 		Telebot:           bot,
 		GigaChat:          gigaChat,
 		SaluteSpeech:      saluteSpeech,
@@ -113,7 +117,7 @@ func (b *BotService) HandleChat(c telebot.Context) error {
 
 	response, err := b.GigaChat.SendMessage(prompt)
 	if err != nil {
-		log.Printf("Failed to get response from GigaChat: %v", err)
+		b.Logger.Error().Err(err).Msgf("Failed to get response from GigaChat: %v", err)
 		return c.Reply("Не удалось получить ответ от GigaChat.")
 	}
 
@@ -121,7 +125,7 @@ func (b *BotService) HandleChat(c telebot.Context) error {
 	ctx := b.getCtx(c)
 	err = b.ChatHistoryRepo.Create(ctx, c.Sender().ID, prompt, response)
 	if err != nil {
-		log.Printf("Failed to save chat history: %v", err)
+		b.Logger.Error().Err(err).Msgf("Failed to save chat history: %v", err)
 		// Не фатально — продолжаем
 	}
 
@@ -170,12 +174,12 @@ func (b *BotService) notifyUserOfFailure(userID int64, meetingTitle string) {
 	})
 
 	if err != nil {
-		log.Printf("Failed to send failure notification to user %d: %v", userID, err)
+		b.Logger.Error().Err(err).Msgf("Failed to send failure notification to user %d: %v", userID, err)
 		return
 	}
 
 	// Опционально: можно залогировать ID отправленного сообщения
-	log.Printf("Failure notification sent to user %d, message ID: %d", userID, msg.ID)
+	b.Logger.Warn().Msgf("Failure notification sent to user %d, message ID: %d", userID, msg.ID)
 }
 
 func (b *BotService) notifyUserOfSuccess(userID int64, title string) {
@@ -186,10 +190,10 @@ func (b *BotService) notifyUserOfSuccess(userID int64, title string) {
 		ParseMode: "Markdown",
 	})
 	if err != nil {
-		log.Printf("Failed to send success notification to user %d: %v", userID, err)
+		b.Logger.Error().Err(err).Msgf("Failed to send success notification to user %d: %v", userID, err)
 		return
 	}
-	log.Printf("Success notification sent to user %d, message ID: %d", userID, message.ID)
+	b.Logger.Info().Msgf("Success notification sent to user %d, message ID: %d", userID, message.ID)
 }
 
 // HandleStart обрабатывает команду /start.
@@ -199,7 +203,7 @@ func (b *BotService) HandleStart(c telebot.Context) error {
 
 	existingUser, err := b.UserRepo.FindByTelegramID(ctx, user.ID)
 	if err != nil {
-		log.Printf("Error checking user existence: %v", err)
+		b.Logger.Error().Err(err).Msgf("Error checking user existence: %v", err)
 	}
 
 	userDB := &models.User{
@@ -214,14 +218,14 @@ func (b *BotService) HandleStart(c telebot.Context) error {
 	if existingUser == nil {
 		err = b.UserRepo.CreateIfNotExists(ctx, userDB)
 		if err != nil {
-			log.Printf("Failed to save new user: %v", err)
+			b.Logger.Error().Err(err).Msgf("Failed to save new user: %v", err)
 		}
 		message = fmt.Sprintf("Добро пожаловать, %s!\nТы успешно зарегистрирован.", user.FirstName)
 	} else {
 		userDB.ID = existingUser.ID
 		err = b.UserRepo.Update(ctx, userDB)
 		if err != nil {
-			log.Printf("Failed to update user: %v", err)
+			b.Logger.Error().Err(err).Msgf("Failed to update user: %v", err)
 		}
 		message = fmt.Sprintf("С возвращением, %s!\nРад снова тебя видеть.", user.FirstName)
 	}
@@ -252,7 +256,7 @@ func (b *BotService) HandleGet(c telebot.Context) error {
 
 	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
 	if err != nil {
-		log.Printf("Failed to fetch meetings: %v", err)
+		b.Logger.Error().Err(err).Msgf("Failed to fetch meetings: %v", err)
 		return c.Reply("Не удалось загрузить список встреч.")
 	}
 
@@ -264,7 +268,7 @@ func (b *BotService) HandleGet(c telebot.Context) error {
 
 	fullMeeting, err := b.MeetingRepo.GetByUserAndID(ctx, user.ID, meeting.ID)
 	if err != nil {
-		log.Printf("Failed to load full meeting %s: %v", meeting.ID, err)
+		b.Logger.Error().Err(err).Msgf("Failed to load full meeting %s: %v", meeting.ID, err)
 		return c.Reply("Не удалось загрузить содержимое встречи.")
 	}
 
@@ -309,11 +313,11 @@ func (b *BotService) HandleFind(c telebot.Context) error {
 		return c.Reply("Запрос не может быть пустым.")
 	}
 
-	log.Printf("User %d searching for: %q", user.ID, query)
+	b.Logger.Info().Msgf("User %d searching for: %q", user.ID, query)
 
 	meetings, err := b.MeetingRepo.SearchByUser(ctx, user.ID, query)
 	if err != nil {
-		log.Printf("Search failed for user %d: %v", user.ID, err)
+		b.Logger.Error().Err(err).Msgf("Search failed for user %d: %v", user.ID, err)
 		return c.Reply("Произошла ошибка при поиске.")
 	}
 
@@ -358,7 +362,7 @@ func (b *BotService) HandleList(c telebot.Context) error {
 
 	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
 	if err != nil {
-		log.Printf("Failed to fetch meetings for user %d: %v", user.ID, err)
+		b.Logger.Error().Err(err).Msgf("Failed to fetch meetings for user %d: %v", user.ID, err)
 		return c.Reply("Не удалось загрузить список встреч.")
 	}
 

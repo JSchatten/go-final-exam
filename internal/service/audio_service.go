@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,13 +17,13 @@ func (b *BotService) HandleAudio(c telebot.Context) error {
 	audio := c.Message().Audio
 	user := c.Sender()
 
-	log.Printf("AUDIO MEASSEG:\n%+v\n", audio)
+	b.Logger.Debug().Msgf("AUDIO MEASSEG:\n%+v\n", audio)
 
-	log.Printf("Received audio file: %s, Duration: %d sec, FileID: %s", audio.Title, audio.Duration, audio.FileID)
+	b.Logger.Info().Msgf("Received audio file: %s, Duration: %d sec, FileID: %s", audio.Title, audio.Duration, audio.FileID)
 
 	file, err := b.Telebot.FileByID(audio.FileID)
 	if err != nil {
-		log.Printf("Failed to get file info: %v", err)
+		b.Logger.Error().Err(err).Msgf("Failed to get file info: %v", err)
 		return c.Reply("Failed to load audio file.")
 	}
 
@@ -42,13 +41,13 @@ func (b *BotService) HandleAudio(c telebot.Context) error {
 	audioPath := filepath.Join(audioDir, fmt.Sprintf("audio_%d_%d%s", user.ID, timestamp, ext))
 
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
-		log.Printf("Failed to create dir: %v", err)
+		b.Logger.Error().Err(err).Msgf("Failed to create dir: %v", err)
 		return c.Reply("Failed to save audio.")
 	}
 
 	outFile, err := os.Create(audioPath)
 	if err != nil {
-		log.Printf("Failed to create file: %v", err)
+		b.Logger.Error().Err(err).Msgf("Failed to create file: %v", err)
 		return c.Reply("Failed to save audio.")
 	}
 	defer outFile.Close()
@@ -56,23 +55,23 @@ func (b *BotService) HandleAudio(c telebot.Context) error {
 	fileURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", b.Telebot.Token, file.FilePath)
 	resp, err := http.Get(fileURL)
 	if err != nil {
-		log.Printf("Failed to download file: %v", err)
+		b.Logger.Error().Err(err).Msgf("Failed to download file: %v", err)
 		return c.Reply("Failed to download audio.")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("HTTP error on download: %d", resp.StatusCode)
+		b.Logger.Error().Msgf("HTTP error on download: %d", resp.StatusCode)
 		return c.Reply("Failed to download audio.")
 	}
 
 	_, err = io.Copy(outFile, resp.Body)
 	if err != nil {
-		log.Printf("Failed to write file: %v", err)
+		b.Logger.Error().Err(err).Msgf("Failed to write file: %v", err)
 		return c.Reply("Failed to save audio.")
 	}
 
-	log.Printf("Audio saved: %s", audioPath)
+	b.Logger.Debug().Msgf("Audio saved: %s", audioPath)
 
 	ctx := b.getCtx(c)
 
@@ -81,7 +80,7 @@ func (b *BotService) HandleAudio(c telebot.Context) error {
 	// Единая логика обработки
 	err = b.processAudio(ctx, user.ID, audioPath, title)
 	if err != nil {
-		log.Printf("processAudio failed: %v", err)
+		b.Logger.Error().Err(err).Msgf("processAudio failed: %v", err)
 		return c.Reply("Failed to start transcription.")
 	}
 

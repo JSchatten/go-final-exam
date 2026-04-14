@@ -4,11 +4,12 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/JSchatten/go-final-exam/internal/logger"
 	"github.com/JSchatten/go-final-exam/internal/models"
 	"github.com/JSchatten/go-final-exam/internal/service"
+	"github.com/rs/zerolog"
 )
 
 // TranscriptionWorker проверяет статус задач распознавания и при завершении
@@ -16,6 +17,7 @@ import (
 type TranscriptionWorker struct {
 	bot    *service.BotService
 	ticker *time.Ticker
+	logger zerolog.Logger
 }
 
 // NewTranscriptionWorker создаёт новый воркер.
@@ -25,22 +27,23 @@ func NewTranscriptionWorker(
 	return &TranscriptionWorker{
 		bot:    bot,
 		ticker: time.NewTicker(5 * time.Second),
+		logger: logger.WithContext(context.Background()).With().Str("component", "TranscriptionWorker").Logger(),
 	}
 }
 
 // Start запускает фоновую проверку статусов.
 func (w *TranscriptionWorker) Start(ctx context.Context) error {
-	log.Println("TranscriptionWorker: started checking transcription statuses every 5 seconds")
+	w.logger.Info().Msg("TranscriptionWorker: started checking transcription statuses every 5 seconds")
 	defer w.ticker.Stop()
 
 	for {
 		select {
 		case <-w.ticker.C:
 			if err := w.pollAndSync(ctx); err != nil {
-				log.Printf("TranscriptionWorker: failed to sync statuses: %v", err)
+				w.logger.Error().Err(err).Msgf("TranscriptionWorker: failed to sync statuses: %v", err)
 			}
 		case <-ctx.Done():
-			log.Println("TranscriptionWorker: shutting down...")
+			w.logger.Info().Msg("TranscriptionWorker: shutting down...")
 			return ctx.Err()
 		}
 	}
@@ -53,11 +56,14 @@ func (w *TranscriptionWorker) pollAndSync(ctx context.Context) error {
 		return err
 	}
 
-	log.Printf("TranscriptionWorker: found %d unprocessed transcription(s)", len(transcriptions))
-
+	if len(transcriptions) != 0 {
+		w.logger.Info().Msgf("TranscriptionWorker: found %d unprocessed transcription(s)", len(transcriptions))
+	} else {
+		w.logger.Debug().Msg("TranscriptionWorker: no unprocessed transcriptions found")
+	}
 	for _, t := range transcriptions {
 		if err := w.syncTranscription(ctx, t); err != nil {
-			log.Printf("TranscriptionWorker: failed to sync transcription %s: %v", t.ID, err)
+			w.logger.Error().Err(err).Msgf("TranscriptionWorker: failed to sync transcription %s: %v", t.ID, err)
 		}
 	}
 
@@ -94,14 +100,14 @@ func (w *TranscriptionWorker) syncTranscription(ctx context.Context, t *models.T
 		// Генерируем краткую выжимку
 		summaryText, err := w.bot.GigaChat.Transcribe(text)
 		if err != nil {
-			log.Printf("TranscriptionWorker: failed to generate summary for meeting %s: %v", t.MeetingID, err)
+			w.logger.Error().Err(err).Msgf("TranscriptionWorker: failed to generate summary for meeting %s: %v", t.MeetingID, err)
 			// Прерываем, ошибка генерации фатальна для кошелька на повторные запросы
 			return err
 		} else {
 			// Сохраняем выжимку
 			_, err = w.bot.SummaryRepo.Create(t.MeetingID, summaryText)
 			if err != nil {
-				log.Printf("TranscriptionWorker: failed to save summary: %v", err)
+				w.logger.Error().Err(err).Msgf("TranscriptionWorker: failed to save summary: %v", err)
 				// Ошибка сохранения, что-то не то с БД
 				return err
 			}
@@ -109,13 +115,13 @@ func (w *TranscriptionWorker) syncTranscription(ctx context.Context, t *models.T
 
 		err = w.bot.MeetingRepo.UpdateStatusWithError(ctx, t.MeetingID, models.MeetingStatusCompleted, "")
 		if err != nil {
-			log.Printf("TranscriptionWorker: failed to update meeting status to 'failed': %v", err)
+			w.logger.Error().Err(err).Msgf("TranscriptionWorker: failed to update meeting status to 'failed': %v", err)
 		}
 
-		log.Printf("TranscriptionWorker: generated and saved summary for meeting %s", t.MeetingID)
+		w.logger.Info().Msgf("TranscriptionWorker: generated and saved summary for meeting %s", t.MeetingID)
 
 	case "ERROR", "CANCELED":
-		log.Printf("TranscriptionWorker: task %s failed with status %s", t.SaluteTaskID, newStatus)
+		w.logger.Warn().Msgf("TranscriptionWorker: task %s failed with status %s", t.SaluteTaskID, newStatus)
 		// Обновляем только транскрипцию
 		err = w.bot.TranscriptionRepo.Update(ctx, t.ID, newStatus, nil)
 		if err != nil {
@@ -124,8 +130,14 @@ func (w *TranscriptionWorker) syncTranscription(ctx context.Context, t *models.T
 		// Обновляем статус встречи на "failed"
 		err = w.bot.MeetingRepo.UpdateStatusWithError(ctx, t.MeetingID, models.MeetingStatusFailed, models.ErrorTranscriptionFailed)
 		if err != nil {
-			log.Printf("TranscriptionWorker: failed to update meeting status to 'failed': %v", err)
+			w.logger.Error().Err(err).Msgf("TranscriptionWorker: failed to update meeting status to 'failed': %v", err)
 		}
+
+	default:
+		w.logger.Warn().
+			Str("status", newStatus).
+			Str("task_id", t.SaluteTaskID).
+			Msg("Transcription task still running, unknown new Status")
 	}
 
 	return nil

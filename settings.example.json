@@ -1,4 +1,5 @@
 {
+  "logLevel": "debug",
   "telegram_token": "your_telegram_token",
   "gigachat": {
     "client_id": "giga_client_id",

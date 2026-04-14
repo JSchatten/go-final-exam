@@ -15,6 +15,9 @@ import (
 
 // Config holds the application configuration
 type Config struct {
+	// Sys
+	Loglevel *string `json:"logLevel,omitempty"`
+
 	// Telegram
 	TelegramToken string `json:"telegram_token"`
 
@@ -47,6 +50,11 @@ func LoadConfig() (*Config, error) {
 	err = decoder.Decode(&cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode config file: %w", err)
+	}
+
+	if cfg.Loglevel == nil {
+		loglevel := "info"
+		cfg.Loglevel = &loglevel
 	}
 
 	// Инициализируем подконфиги, если не заданы в JSON
