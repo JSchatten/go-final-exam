@@ -108,24 +108,44 @@ func NewBotService(
 	bs.Telebot.Handle(telebot.OnCallback, func(c telebot.Context) error {
 		data := c.Callback().Data
 
-		fmt.Println(data)
+		// Логируем "как есть" для отладки
+		bs.Logger.Info().
+			Str("raw_callback_data", fmt.Sprintf("%q", data)).
+			Bytes("raw_bytes", []byte(data)).
+			Msg("Received raw callback")
 
-		if strings.HasPrefix(data, "get:") {
+		// Удаляем управляющие и невидимые символы в начале/середине
+		cleaned := strings.TrimLeftFunc(data, func(r rune) bool {
+			return r < 32 // Убираем control chars: \t, \n, \r, \f и др.
+		})
+
+		bs.Logger.Debug().Str("cleaned_data", cleaned).Msg("Cleaned callback data")
+
+		if strings.HasPrefix(cleaned, "get:") {
 			var index int
-			fmt.Sscanf(data, "get:%d", &index)
-			// Сохраняем аргументы в контекст
+			if _, err := fmt.Sscanf(cleaned, "get:%d", &index); err != nil {
+				bs.Logger.Warn().Str("data", cleaned).Msg("Failed to parse get:N")
+				return c.Respond(&telebot.CallbackResponse{
+					Text: "Неверный номер встречи.",
+				})
+			}
+
 			c.Set("args", []string{fmt.Sprintf("%d", index)})
+			bs.Logger.Debug().Int("index", index).Msg("Routing to HandleGet")
 			return bs.HandleGet(c)
 		}
 
-		if strings.HasPrefix(data, "page:") {
+		if strings.HasPrefix(cleaned, "page:") {
+			bs.Logger.Debug().Msg("Routing to HandleList (pagination)")
 			return bs.HandleList(c)
 		}
 
-		if data == "/start" {
+		if cleaned == "/start" {
+			bs.Logger.Debug().Msg("Routing to HandleStart")
 			return bs.HandleStart(c)
 		}
 
+		bs.Logger.Warn().Str("unknown_callback", cleaned).Msg("Unknown callback data")
 		return nil
 	})
 
