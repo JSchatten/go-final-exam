@@ -10,9 +10,18 @@ import (
 
 // /get 1
 func (b *BotService) HandleGet(c telebot.Context) error {
+	b.Logger.Debug().Msg("HandleGet start")
 	ctx := b.getCtx(c)
 	user := c.Sender()
-	args := c.Args()
+
+	// Пытаемся получить args из c.Get("args"), иначе используем c.Args()
+	var args []string
+	if savedArgs, ok := c.Get("args").([]string); ok {
+		args = savedArgs
+	} else {
+		args = c.Args()
+	}
+	b.Logger.Debug().Msgf("args: %v", args)
 
 	if len(args) == 0 {
 		return c.Reply("Укажите номер встречи. Пример: /get 1")
@@ -54,7 +63,6 @@ func (b *BotService) HandleGet(c telebot.Context) error {
 
 	if fullMeeting.SummaryText != nil {
 		result.WriteString("*Краткая выжимка:*\n")
-		// result.WriteString(escapeMarkdown(*fullMeeting.SummaryText))
 		result.WriteString(*fullMeeting.SummaryText)
 	} else {
 		result.WriteString("*Краткая выжимка:* ещё не готова.\n\n")
@@ -123,19 +131,14 @@ func (b *BotService) HandleFind(c telebot.Context) error {
 	return c.Reply(message, &telebot.SendOptions{ParseMode: "Markdown"})
 }
 
-// HandleList обрабатывает команду /list.
+// HandleList обрабатывает команду /list
 func (b *BotService) HandleList(c telebot.Context) error {
 	ctx := b.getCtx(c)
 	user := c.Sender()
-	data := c.Callback()
-	fmt.Printf("data %+v", data)
-	if data != nil {
-		fmt.Printf("data %+v", data.Data)
-	}
 
 	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
 	if err != nil {
-		b.Logger.Error().Err(err).Msgf("Failed to fetch meetings for user %d: %v", user.ID, err)
+		b.Logger.Error().Err(err).Msgf("Failed to fetch meetings for user %d", user.ID)
 		return c.Reply("Не удалось загрузить список встреч.")
 	}
 
@@ -143,57 +146,83 @@ func (b *BotService) HandleList(c telebot.Context) error {
 		return c.Reply("У вас пока нет сохранённых встреч.\nОтправьте голосовое сообщение, и оно появится здесь.")
 	}
 
+	// Определяем текущую страницу
+	page := 0
+	callback := c.Callback()
+	if callback != nil && callback.Data != "" {
+		if strings.HasPrefix(callback.Data, "page:") {
+			fmt.Sscanf(callback.Data, "page:%d", &page)
+		}
+	}
+
+	totalPages := (len(meetings) + ItemsPerPage - 1) / ItemsPerPage
+	if page < 0 || page >= totalPages {
+		page = 0
+	}
+
+	from := page * ItemsPerPage
+	to := min(from+ItemsPerPage, len(meetings))
+	currentPage := meetings[from:to]
+
 	var items []string
-	for i, m := range meetings {
-		dateStr := m.CreatedAt.Format("02.01.2006 15:04")
+	for i, m := range currentPage {
+		idx := from + i + 1
+		dateStr := m.CreatedAt.Format("02.01 15:04")
 		statusText := formatStatus(m.Status)
 		items = append(items, fmt.Sprintf(
-			"%d. *%s*\n   Дата: %s | Статус: %s",
-			i+1,
-			m.Title,
-			dateStr,
-			statusText,
+			"%d. *%s*\n   %s | %s",
+			idx, escapeMarkdown(m.Title), dateStr, statusText,
 		))
 	}
 
 	message := fmt.Sprintf(
 		"Ваши встречи (%d):\n\n%s\n\n"+
-			"Чтобы получить текст встречи, используйте команду /get [номер]",
+			"Выберите номер встречи или переключайтесь между страницами.",
 		len(meetings),
 		strings.Join(items, "\n\n"),
 	)
 
-	Paginator := &telebot.ReplyMarkup{}
-	btnPrev := Paginator.Data("⬅", "prev") // Create a callback data button
-	btnNext := Paginator.Data("➡", "next")
-	btnOne := Selector.Data("1", "first", "")
-	btnTwo := Selector.Data("2", "second", "")
-	btnThree := Selector.Data("3", "third", "")
-	btnFour := Selector.Data("4", "fourth", "")
-	btnFive := Selector.Data("5", "fived", "")
+	// Создаём разметку
+	paginator := &telebot.ReplyMarkup{}
+	var rows []telebot.Row
 
-	// Handler for the button
-	b.Telebot.Handle("\ffirst", func(c telebot.Context) error {
-		// Access the callback data (in this case "12345")
-		data := c.Callback().Data
+	// Первая строка: кнопки 1–5 (номера встреч на этой странице)
+	var numBtns []telebot.Btn
+	for i := 0; i < ItemsPerPage; i++ {
+		idx := from + i + 1
+		if idx > len(meetings) {
+			break
+		}
+		btn := paginator.Data(fmt.Sprintf("%d", idx), fmt.Sprintf("get:%d", idx))
+		numBtns = append(numBtns, btn)
+	}
+	if len(numBtns) > 0 {
+		rows = append(rows, paginator.Row(numBtns...))
+	}
 
-		// Respond to the callback
-		// return c.Respond(&telebot.CallbackResponse{
-		// 	Text: "Product " + data + " selected",
-		// })
+	// Вторая строка: навигация
+	var navBtns []telebot.Btn
+	if page > 0 {
+		navBtns = append(navBtns, paginator.Data("Назад", fmt.Sprintf("page:%d", page-1)))
+	}
+	if page < totalPages-1 {
+		navBtns = append(navBtns, paginator.Data("Вперёд", fmt.Sprintf("page:%d", page+1)))
+	}
+	navBtns = append(navBtns, paginator.Data("В начало", "/start"))
+	rows = append(rows, paginator.Row(navBtns...))
 
-		Message := "Product " + data + " selected"
+	paginator.Inline(rows...)
 
-		return c.Reply(Message, &telebot.SendOptions{ParseMode: "Markdown"})
-	})
-
-	Paginator.Inline(
-		Paginator.Row(btnPrev, btnNext),
-		Paginator.Row(btnOne, btnTwo, btnThree, btnFour, btnFive),
-	)
-
-	return c.Reply(message, &telebot.SendOptions{
-		ParseMode:   "Markdown",
-		ReplyMarkup: Paginator,
-	})
+	// Отправляем сообщение
+	if callback != nil {
+		return c.Edit(message, &telebot.SendOptions{
+			ParseMode:   "Markdown",
+			ReplyMarkup: paginator,
+		})
+	} else {
+		return c.Reply(message, &telebot.SendOptions{
+			ParseMode:   "Markdown",
+			ReplyMarkup: paginator,
+		})
+	}
 }

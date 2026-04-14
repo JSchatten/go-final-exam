@@ -17,6 +17,16 @@ import (
 )
 
 const (
+	ItemsPerPage = 5
+)
+
+type PaginationData struct {
+	Page     int
+	Total    int
+	Meetings []*models.Meeting
+}
+
+const (
 	MaxSizeMb   = 500
 	MaxFileSize = MaxSizeMb * 1024 * 1024 // 500 МБ
 )
@@ -75,8 +85,6 @@ func NewBotService(
 
 	MenuTest := &telebot.ReplyMarkup{ResizeKeyboard: true}
 
-	btnTestInfo := MenuInBot.Text("TestInfo")
-
 	bs := &BotService{
 		Logger:            logger.WithContext(context.Background()).With().Str("component", "BotService").Logger(),
 		Telebot:           bot,
@@ -92,8 +100,33 @@ func NewBotService(
 		MenuTest:          MenuTest,
 	}
 
-	bs.Telebot.Handle(&btnTestInfo, func(c telebot.Context) error {
-		return c.Reply("TestInfo", MenuTest)
+	// btnTestInfo := MenuInBot.Text("TestInfo")
+	// bs.Telebot.Handle(&btnTestInfo, func(c telebot.Context) error {
+	// 	return c.Reply("TestInfo", MenuTest)
+	// })
+
+	bs.Telebot.Handle(telebot.OnCallback, func(c telebot.Context) error {
+		data := c.Callback().Data
+
+		fmt.Println(data)
+
+		if strings.HasPrefix(data, "get:") {
+			var index int
+			fmt.Sscanf(data, "get:%d", &index)
+			// Сохраняем аргументы в контекст
+			c.Set("args", []string{fmt.Sprintf("%d", index)})
+			return bs.HandleGet(c)
+		}
+
+		if strings.HasPrefix(data, "page:") {
+			return bs.HandleList(c)
+		}
+
+		if data == "/start" {
+			return bs.HandleStart(c)
+		}
+
+		return nil
 	})
 
 	return bs
