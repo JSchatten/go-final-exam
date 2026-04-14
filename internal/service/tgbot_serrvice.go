@@ -82,7 +82,7 @@ func (b *BotService) HandleChat(c telebot.Context) error {
 		return c.Reply("Напишите запрос после команды. Пример: /chat Как дела?")
 	}
 
-	response, err := b.GigaChat.SendMessage(prompt)
+	response, err := b.GigaChat.SendChatMessage(prompt)
 	if err != nil {
 		b.Logger.Error().Err(err).Msgf("Failed to get response from GigaChat: %v", err)
 		return c.Reply("Не удалось получить ответ от GigaChat.")
