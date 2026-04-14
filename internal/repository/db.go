@@ -4,7 +4,6 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"log"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -40,7 +39,7 @@ func InitDB(cfg *Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Println("Database connection established")
+	// log.Println("Database connection established")
 
 	// Устанавливаем search_path
 	_, err = conn.Exec("SET search_path TO public")
@@ -70,21 +69,22 @@ func InitDB(cfg *Config) (*DB, error) {
 		return nil, fmt.Errorf("could not run migrate up: %w", err)
 	}
 
-	if err == migrate.ErrNoChange {
-		log.Println("Migrations applied: no changes (already up to date)")
-	} else {
-		log.Println("Migrations applied successfully")
-	}
+	// if err == migrate.ErrNoChange {
+	// 	log.Println("Migrations applied: no changes (already up to date)")
+	// } else {
+	// 	log.Println("Migrations applied successfully")
+	// }
 
 	return &DB{Conn: conn}, nil
 }
 
 // Close closes the database connection
-func (db *DB) Close() {
+func (db *DB) Close() error {
 	if db.Conn != nil {
 		err := db.Conn.Close()
 		if err != nil {
-			log.Printf("Error closing database: %v", err)
+			return err
 		}
 	}
+	return nil
 }

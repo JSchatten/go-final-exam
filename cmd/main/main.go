@@ -3,8 +3,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +14,7 @@ import (
 	"github.com/JSchatten/go-final-exam/internal/config"
 	"github.com/JSchatten/go-final-exam/internal/integration/gigachat"
 	"github.com/JSchatten/go-final-exam/internal/integration/salutespeech"
+	"github.com/JSchatten/go-final-exam/internal/logger"
 	"github.com/JSchatten/go-final-exam/internal/repository"
 	"github.com/JSchatten/go-final-exam/internal/service"
 	"github.com/JSchatten/go-final-exam/internal/worker"
@@ -25,18 +24,19 @@ func main() {
 	// Загружаем конфигурацию
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.Get().Fatal().Msgf("Failed to load config: %v", err)
 	}
+	logger.SetLevel(*cfg.Loglevel)
 
 	// Выводим конфигурацию (для отладки)
-	fmt.Println("Configuration loaded:")
-	fmt.Printf("Telegram Token: %s\n", cfg.TelegramToken)
-	fmt.Printf("GigaChat ClientID: %s\n", cfg.Gigachat.ClientID)
-	fmt.Printf("GigaChat Scope: %s\n", cfg.Gigachat.Scope)
-	fmt.Printf("SaluteSpeech ClientID: %s\n", cfg.SaluteSpeech.ClientID)
-	fmt.Printf("SaluteSpeech Scope: %s\n", cfg.SaluteSpeech.Scope)
-	fmt.Printf("Database: %s@%s:%d/%s\n", cfg.Database.User, cfg.Database.Host, cfg.Database.Port, cfg.Database.Name)
-	fmt.Printf("Audio Storage Path: %s\n", cfg.AudioStoragePath)
+	logger.Get().Info().Msg("Configuration loaded")
+	logger.Get().Debug().Msgf("Telegram Token: %s", cfg.TelegramToken)
+	logger.Get().Debug().Msgf("GigaChat ClientID: %s", cfg.Gigachat.ClientID)
+	logger.Get().Debug().Msgf("GigaChat Scope: %s", cfg.Gigachat.Scope)
+	logger.Get().Debug().Msgf("SaluteSpeech ClientID: %s", cfg.SaluteSpeech.ClientID)
+	logger.Get().Debug().Msgf("SaluteSpeech Scope: %s", cfg.SaluteSpeech.Scope)
+	logger.Get().Debug().Msgf("Database: %s@%s:%d/%s", cfg.Database.User, cfg.Database.Host, cfg.Database.Port, cfg.Database.Name)
+	logger.Get().Debug().Msgf("Audio Storage Path: %s", cfg.AudioStoragePath)
 
 	// Создаём Telebot
 	settings := telebot.Settings{
@@ -46,25 +46,25 @@ func main() {
 
 	telebotInstance, err := telebot.NewBot(settings)
 	if err != nil {
-		log.Fatalf("Failed to create Telegram bot: %v", err)
+		logger.Get().Fatal().Msgf("Failed to create Telegram bot: %v", err)
 	}
 
 	// GigaChat Client
 	gigaChat, err := gigachat.NewGigaChatClient(cfg.Gigachat)
 	if err != nil {
-		log.Fatalf("Failed to create GigaChat client: %v", err)
+		logger.Get().Fatal().Msgf("Failed to create GigaChat client: %v", err)
 	}
 
 	// SaluteSpeech Client
 	saluteSpeech, err := salutespeech.NewSaluteSpeechClient(cfg.SaluteSpeech)
 	if err != nil {
-		log.Fatalf("Failed to create SaluteSpeech client: %v", err)
+		logger.Get().Fatal().Msgf("Failed to create SaluteSpeech client: %v", err)
 	}
 
 	// Database
 	db, err := repository.InitDB(cfg.Database)
 	if err != nil {
-		log.Fatalf("Failed to init DB: %v", err)
+		logger.Get().Fatal().Msgf("Failed to init DB: %v", err)
 	}
 
 	// Создаём экземпляр бота-сервиса
@@ -87,7 +87,7 @@ func main() {
 	telebotInstance.Handle(telebot.OnAudio, bot.HandleAudio)
 	telebotInstance.Handle(telebot.OnText, bot.HandleText)
 
-	fmt.Println("Application is running...")
+	logger.Get().Info().Msg("Application is running...")
 
 	// Создаём контекст для graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -98,7 +98,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-quit
-		log.Printf("Received signal: %s. Shutting down...\n", sig)
+		logger.Get().Info().Msgf("Received signal: %s. Shutting down...\n", sig)
 		cancel()
 	}()
 
@@ -107,7 +107,7 @@ func main() {
 
 	// Запуск бота с graceful shutdown
 	g.Go(func() error {
-		log.Println("Bot: starting...")
+		logger.Get().Info().Msg("Bot: starting...")
 
 		// Запускаем Start в отдельной горутине
 		go bot.Telebot.Start()
@@ -115,7 +115,7 @@ func main() {
 		// Ждём сигнала остановки
 		<-gCtx.Done()
 
-		log.Println("Bot: stopping...")
+		logger.Get().Info().Msg("Bot: stopping...")
 		bot.Telebot.Stop() // ← Это заставит Start() вернуться
 
 		return nil
@@ -131,9 +131,9 @@ func main() {
 
 	// Ждём завершения всех задач
 	if err := g.Wait(); err != nil && err != ctx.Err() {
-		log.Printf("Application error: %v", err)
+		logger.Get().Fatal().Msgf("Application error: %v", err)
 	}
 
-	log.Println("Application stopped.")
+	logger.Get().Info().Msg("Application stopped.")
 
 }

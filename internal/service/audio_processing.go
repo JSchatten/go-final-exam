@@ -4,7 +4,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/JSchatten/go-final-exam/internal/models"
@@ -42,7 +41,7 @@ func (b *BotService) processAudio(ctx context.Context, userID int64, audioPath, 
 		return fmt.Errorf("failed to create recognition task: %w", err)
 	}
 
-	log.Printf("Transcription task created: meeting_id=%s, task_id=%s, status=%s", meeting.ID, taskID, taskStatus)
+	b.Logger.Debug().Msgf("Transcription task created: meeting_id=%s, task_id=%s, status=%s", meeting.ID, taskID, taskStatus)
 
 	// Сохраняем транскрипцию
 	_, err = b.TranscriptionRepo.Create(ctx, meeting.ID, taskID, taskStatus)
@@ -55,14 +54,14 @@ func (b *BotService) processAudio(ctx context.Context, userID int64, audioPath, 
 	meeting.Status = models.MeetingStatusProcessing
 	err = b.MeetingRepo.UpdateMeeting(ctx, meeting)
 	if err != nil {
-		log.Printf("Warning: failed to update meeting status: %v", err)
+		b.Logger.Error().Err(err).Msgf("Warning: failed to update meeting status: %v", err)
 	}
 
 	return nil
 }
 
 func setMeetingError(b *BotService, ctx context.Context, meeting *models.Meeting, msg string) {
-	log.Println("Error:", msg)
+	b.Logger.Debug().Msgf("Error: %s", msg)
 	meeting.Status = models.MeetingStatusFailed
 	meeting.ErrorMessage.Valid = true
 	meeting.ErrorMessage.String = msg
