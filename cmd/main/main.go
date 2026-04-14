@@ -40,8 +40,11 @@ func main() {
 
 	// Создаём Telebot
 	settings := telebot.Settings{
-		Token:  cfg.TelegramToken,
-		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
+		Token: cfg.TelegramToken,
+		Poller: &telebot.LongPoller{
+			Timeout:        10 * time.Second,
+			AllowedUpdates: []string{"message", "callback_query"},
+		},
 	}
 
 	telebotInstance, err := telebot.NewBot(settings)

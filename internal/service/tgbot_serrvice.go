@@ -13,6 +13,7 @@ import (
 	"github.com/JSchatten/go-final-exam/internal/logger"
 	"github.com/JSchatten/go-final-exam/internal/models"
 	"github.com/JSchatten/go-final-exam/internal/repository"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 
@@ -108,45 +109,41 @@ func NewBotService(
 	bs.Telebot.Handle(telebot.OnCallback, func(c telebot.Context) error {
 		data := c.Callback().Data
 
-		// Логируем "как есть" для отладки
+		// Логируем "как есть"
 		bs.Logger.Info().
 			Str("raw_callback_data", fmt.Sprintf("%q", data)).
 			Bytes("raw_bytes", []byte(data)).
 			Msg("Received raw callback")
 
-		// Удаляем управляющие и невидимые символы в начале/середине
-		cleaned := strings.TrimLeftFunc(data, func(r rune) bool {
-			return r < 32 // Убираем control chars: \t, \n, \r, \f и др.
-		})
+		cleaned := strings.TrimLeftFunc(data, func(r rune) bool { return r < 32 })
 
 		bs.Logger.Debug().Str("cleaned_data", cleaned).Msg("Cleaned callback data")
 
 		if strings.HasPrefix(cleaned, "get:") {
-			var index int
-			if _, err := fmt.Sscanf(cleaned, "get:%d", &index); err != nil {
-				bs.Logger.Warn().Str("data", cleaned).Msg("Failed to parse get:N")
+			idStr := strings.TrimPrefix(cleaned, "get:")
+			meetingID, err := uuid.Parse(idStr)
+			if err != nil {
+				bs.Logger.Warn().Str("id", idStr).Msg("Invalid UUID in callback")
 				return c.Respond(&telebot.CallbackResponse{
-					Text: "Неверный номер встречи.",
+					Text: "Ошибка: неверный идентификатор встречи.",
 				})
 			}
 
-			c.Set("args", []string{fmt.Sprintf("%d", index)})
-			bs.Logger.Debug().Int("index", index).Msg("Routing to HandleGet")
-			return bs.HandleGet(c)
+			// Сохраняем ID встречи в контекст
+			c.Set("meeting_id", meetingID)
+			return bs.HandleGetByID(c)
 		}
 
 		if strings.HasPrefix(cleaned, "page:") {
-			bs.Logger.Debug().Msg("Routing to HandleList (pagination)")
 			return bs.HandleList(c)
 		}
 
 		if cleaned == "/start" {
-			bs.Logger.Debug().Msg("Routing to HandleStart")
 			return bs.HandleStart(c)
 		}
 
 		bs.Logger.Warn().Str("unknown_callback", cleaned).Msg("Unknown callback data")
-		return nil
+		return c.Respond()
 	})
 
 	return bs
