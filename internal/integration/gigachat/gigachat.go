@@ -103,22 +103,8 @@ func (c *GigaChatClient) sendChatRequest(request ChatRequest) (string, error) {
 	return chatResp.Choices[0].Message.Content, nil
 }
 
-// SendMessage отправляет сообщение пользователю и возвращает ответ ассистента
-func (c *GigaChatClient) SendMessage(content string) (string, error) {
-	request := ChatRequest{
-		Model: Model,
-		Messages: []Message{
-			{Role: "user", Content: content},
-		},
-		Stream:            StreamDisabled,
-		RepetitionPenalty: DefaultRepetitionPenalty,
-	}
-	return c.sendChatRequest(request)
-}
-
-// SendMessageWithSystemPrompt отправляет системный промпт + сообщение пользователя
-func (c *GigaChatClient) SendMessageWithSystemPrompt(systemPrompt, userContent string) (string, error) {
-	request := ChatRequest{
+func (c *GigaChatClient) newChatRequest(systemPrompt, userContent string) ChatRequest {
+	return ChatRequest{
 		Model: Model,
 		Messages: []Message{
 			{Role: "system", Content: systemPrompt},
@@ -127,12 +113,23 @@ func (c *GigaChatClient) SendMessageWithSystemPrompt(systemPrompt, userContent s
 		Stream:            StreamDisabled,
 		RepetitionPenalty: DefaultRepetitionPenalty,
 	}
+}
+
+// SendChatMessage отправляет сообщение пользователю и возвращает ответ ассистента
+func (c *GigaChatClient) SendChatMessage(content string) (string, error) {
+	request := c.newChatRequest(SystemPromptChat, content)
+	return c.sendChatRequest(request)
+}
+
+// SendMessageWithSystemPrompt отправляет системный промпт + сообщение пользователя
+func (c *GigaChatClient) SendMessageWithSystemPrompt(systemPrompt, userContent string) (string, error) {
+	request := c.newChatRequest(systemPrompt, userContent)
 	return c.sendChatRequest(request)
 }
 
 // Transcribe анализирует текст встречи и возвращает структурированную выжимку
 func (c *GigaChatClient) Transcribe(speechText string) (string, error) {
-	response, err := c.SendMessageWithSystemPrompt(SystemPrompt, speechText)
+	response, err := c.SendMessageWithSystemPrompt(SystemPromptSummary, speechText)
 	if err != nil {
 		return "", fmt.Errorf("failed to get transcription from GigaChat: %w", err)
 	}

@@ -73,3 +73,14 @@ CREATE INDEX idx_summaries_meeting_id ON summaries(meeting_id); -- JOIN с meeti
 CREATE INDEX idx_chat_user_id ON chat_history(user_id);
 CREATE INDEX idx_chat_created ON chat_history(created_at DESC);
 CREATE INDEX idx_chat_user_created ON chat_history(user_id, created_at DESC); -- последние запросы пользователя
+
+-- Для индексации текста
+/*
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- Для заголовков встреч
+CREATE INDEX idx_meetings_title_trgm ON meetings USING gin (title gin_trgm_ops);
+-- Для транскрипций
+CREATE INDEX idx_transcriptions_full_text_trgm ON transcriptions USING gin (full_text gin_trgm_ops);
+-- Для выжимок
+CREATE INDEX idx_summaries_summary_text_trgm ON summaries USING gin (summary_text gin_trgm_ops);
+*/

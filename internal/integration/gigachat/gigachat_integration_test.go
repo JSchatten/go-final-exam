@@ -60,7 +60,7 @@ func TestGigaChat_SendMessage_ExtractSummary(t *testing.T) {
 `
 
 	// Отправляем запрос с системным промптом
-	response, err := client.SendMessageWithSystemPrompt(SystemPrompt, inputText)
+	response, err := client.SendMessageWithSystemPrompt(SystemPromptSummary, inputText)
 	require.NoError(t, err, "SendMessageWithSystemPrompt вернул ошибку")
 	assert.NotEmpty(t, response, "Ответ от GigaChat пуст")
 

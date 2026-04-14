@@ -190,11 +190,11 @@ func (r *MeetingRepository) SearchByUser(ctx context.Context, userID int64, quer
 		LEFT JOIN transcriptions t ON t.meeting_id = m.id
 		LEFT JOIN summaries s ON s.meeting_id = m.id
 		WHERE m.user_id = $1
-		  AND (
-			LOWER(m.title) LIKE LOWER($2)
-			OR LOWER(t.full_text) LIKE LOWER($2)
-			OR LOWER(s.summary_text) LIKE LOWER($2)
-		  )
+		AND (
+			m.title ILIKE $2
+			OR t.full_text ILIKE $2
+			OR s.summary_text ILIKE $2
+		)
 		ORDER BY m.created_at DESC
 	`
 
