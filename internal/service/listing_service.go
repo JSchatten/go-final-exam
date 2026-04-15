@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/JSchatten/go-final-exam/internal/models"
+	"github.com/JSchatten/go-final-exam/internal/repository"
 	"github.com/google/uuid"
 	"gopkg.in/telebot.v3"
 )
@@ -168,45 +170,21 @@ func (b *BotService) HandleFind(c telebot.Context) error {
 	return c.Reply(message, &telebot.SendOptions{ParseMode: "Markdown"})
 }
 
-// HandleList обрабатывает команду /list
-func (b *BotService) HandleList(c telebot.Context) error {
-	b.Logger.Debug().Msgf("HandleList start")
-	ctx := b.getCtx(c)
-	user := c.Sender()
+// Начало обработки списка
 
-	// Получаем все встречи пользователя
-	meetings, err := b.MeetingRepo.ListByUser(ctx, user.ID)
-	if err != nil {
-		b.Logger.Error().Err(err).Msgf("Failed to fetch meetings for user %d", user.ID)
-		return c.Reply("Не удалось загрузить список встреч.")
-	}
+type listRenderData struct {
+	Message     string
+	ReplyMarkup *telebot.ReplyMarkup
+}
 
-	if len(meetings) == 0 {
-		return c.Reply("У вас пока нет сохранённых встреч.\nОтправьте голосовое сообщение, и оно появится здесь.")
-	}
+func (b *BotService) renderListPage(meetings []*models.Meeting, page, totalItems int) (*listRenderData, error) {
+	const itemsPerPage = ItemsPerPage
 
-	// Определяем текущую страницу
-	page := 0
-	callback := c.Callback()
-	if callback != nil && callback.Data != "" {
-		if strings.HasPrefix(callback.Data, "page:") {
-			fmt.Sscanf(callback.Data, "page:%d", &page)
-		}
-	} else {
-		b.Logger.Info().Msgf("callback == nil OR callback.Data = '' ")
-	}
-
-	totalPages := (len(meetings) + ItemsPerPage - 1) / ItemsPerPage
-	if page < 0 || page >= totalPages {
-		page = 0
-	}
-
-	from := page * ItemsPerPage
-	to := min(from+ItemsPerPage, len(meetings))
-	currentPage := meetings[from:to]
+	from := page * itemsPerPage
+	totalPages := (totalItems + itemsPerPage - 1) / itemsPerPage
 
 	var items []string
-	for i, m := range currentPage {
+	for i, m := range meetings {
 		idx := from + i + 1
 		dateStr := m.CreatedAt.Format("02.01 15:04")
 		statusText := formatStatus(m.Status)
@@ -217,60 +195,129 @@ func (b *BotService) HandleList(c telebot.Context) error {
 	}
 
 	message := fmt.Sprintf(
-		"Ваши встречи (%d):\n\n%s\n\n"+
+		"Ваши встречи (%d) — Страница %d/%d:\n\n%s\n\n"+
 			"Выберите номер встречи или переключайтесь между страницами.",
-		len(meetings),
+		totalItems,
+		page+1, totalPages,
 		strings.Join(items, "\n\n"),
 	)
 
-	// Создаём НОВЫЙ экземпляр ReplyMarkup каждый раз
-	paginator := &telebot.ReplyMarkup{}
+	markup := &telebot.ReplyMarkup{}
 	var rows []telebot.Row
 
-	// Первая строка: кнопки 1–5 (отображаем номер, но в Data - ID встречи)
+	// Кнопки 1–5
 	var numBtns []telebot.Btn
-	for i, m := range currentPage {
-		btn := paginator.Data(
-			fmt.Sprintf("%d", from+i+1),          // отображается: "1", "2", ...
-			fmt.Sprintf("get:%s", m.ID.String()), // передаётся: "get:uuid"
+	for i, m := range meetings {
+		btn := markup.Data(
+			fmt.Sprintf("%d", from+i+1),
+			fmt.Sprintf("get:%s", m.ID.String()),
 		)
 		numBtns = append(numBtns, btn)
 	}
 	if len(numBtns) > 0 {
-		rows = append(rows, paginator.Row(numBtns...))
+		rows = append(rows, markup.Row(numBtns...))
 	}
 
-	// Вторая строка: навигация
+	// Навигация
 	var navBtns []telebot.Btn
 	if page > 0 {
-		navBtns = append(navBtns, paginator.Data("Назад", fmt.Sprintf("page:%d", page-1)))
+		navBtns = append(navBtns, markup.Data("Назад", fmt.Sprintf("page:%d", page-1)))
 	}
 	if page < totalPages-1 {
-		navBtns = append(navBtns, paginator.Data("Вперёд", fmt.Sprintf("page:%d", page+1)))
+		navBtns = append(navBtns, markup.Data("Вперёд", fmt.Sprintf("page:%d", page+1)))
 	}
-	navBtns = append(navBtns, paginator.Data("В начало", "/start"))
-	rows = append(rows, paginator.Row(navBtns...))
+	navBtns = append(navBtns, markup.Data("В начало", "/start"))
+	rows = append(rows, markup.Row(navBtns...))
 
-	// Применяем разметку
-	paginator.Inline(rows...)
+	markup.Inline(rows...)
 
-	// Если это колбэк - редактируем сообщение
-	if callback != nil {
-		b.Logger.Debug().Msg("HandleList callback captured")
-		currentMsg := c.Message()
+	return &listRenderData{
+		Message:     message,
+		ReplyMarkup: markup,
+	}, nil
+}
 
-		// Проверяем, отличается ли новое сообщение от текущего
-		if currentMsg.Text == message && isSameInlineMarkup(currentMsg.ReplyMarkup, paginator) {
-			// Ничего не изменилось - просто подтверждаем нажатие
-			b.Logger.Debug().Msg("HandleList callback nothing changed")
+// HandleList обрабатывает команду /list [номер_страницы]
+func (b *BotService) HandleList(c telebot.Context) error {
+	ctx := b.getCtx(c)
+	user := c.Sender()
+
+	var requestedPage int
+
+	args := b.getArgs(c)
+
+	if len(args) > 0 {
+		pageArg := args[0]
+		page, err := strconv.Atoi(pageArg)
+		if err != nil {
+			return c.Reply("Неверный номер страницы. Укажите число.")
+		}
+		if page < 0 {
+			return c.Reply("Номер страницы не может быть отрицательным.")
+		}
+		requestedPage = page
+	} else {
+		callback := c.Callback()
+		if callback != nil && callback.Data != "" {
+			data := strings.TrimLeftFunc(callback.Data, func(r rune) bool { return r < 32 })
+			if strings.HasPrefix(data, "page:") {
+				fmt.Sscanf(data, "page:%d", &requestedPage)
+			}
+		}
+	}
+
+	b.Logger.Debug().Int("requested_page", requestedPage).Msg("Requested page from args or callback")
+
+	// Получаем общее количество встреч
+	totalResult, err := b.MeetingRepo.ListByUserWithPagination(ctx, user.ID, repository.PaginationParams{Limit: 1, Offset: 0})
+	if err != nil {
+		b.Logger.Error().Err(err).Msgf("Failed to fetch meetings count for user %d", user.ID)
+		return c.Reply("Не удалось загрузить список встреч.")
+	}
+
+	totalItems := totalResult.Total
+	if totalItems == 0 {
+		return c.Reply("У вас пока нет сохранённых встреч.\nОтправьте голосовое сообщение, и оно появится здесь.")
+	}
+
+	// Рассчитываем общее количество страниц
+	totalPages := (totalItems + ItemsPerPage - 1) / ItemsPerPage
+	if requestedPage >= totalPages {
+		requestedPage = totalPages - 1
+		if requestedPage < 0 {
+			requestedPage = 0
+		}
+	}
+
+	// Загружаем нужную страницу
+	offset := requestedPage * ItemsPerPage
+	paginated, err := b.MeetingRepo.ListByUserWithPagination(ctx, user.ID, repository.PaginationParams{
+		Limit:  ItemsPerPage,
+		Offset: offset,
+	})
+	if err != nil {
+		b.Logger.Error().Err(err).Msgf("Failed to fetch paginated meetings for user %d", user.ID)
+		return c.Reply("Не удалось загрузить список встреч.")
+	}
+
+	meetings := paginated.Items
+
+	// Рендерим
+	renderData, err := b.renderListPage(meetings, requestedPage, totalItems)
+	if err != nil {
+		return err
+	}
+
+	// Если это колбэк — редактируем сообщение
+	if c.Callback() != nil {
+		current := c.Message()
+		if current.Text == renderData.Message && isSameInlineMarkup(current.ReplyMarkup, renderData.ReplyMarkup) {
 			return c.Respond()
 		}
 
-		// Пробуем отредактировать
-		b.Logger.Debug().Msg("HandleList callback try edit")
-		err := c.Edit(message, &telebot.SendOptions{
+		err := c.Edit(renderData.Message, &telebot.SendOptions{
 			ParseMode:   "Markdown",
-			ReplyMarkup: paginator,
+			ReplyMarkup: renderData.ReplyMarkup,
 		})
 		if err != nil {
 			if strings.Contains(err.Error(), "message is not modified") {
@@ -279,14 +326,13 @@ func (b *BotService) HandleList(c telebot.Context) error {
 			return err
 		}
 		return nil
-	} else {
-		// Первый вызов - отправляем новое сообщение
-		b.Logger.Debug().Msg("HandleList callback first cal")
-		return c.Reply(message, &telebot.SendOptions{
-			ParseMode:   "Markdown",
-			ReplyMarkup: paginator,
-		})
 	}
+
+	// Первый вызов (/list или /list 1)
+	return c.Reply(renderData.Message, &telebot.SendOptions{
+		ParseMode:   "Markdown",
+		ReplyMarkup: renderData.ReplyMarkup,
+	})
 }
 
 func isSameInlineMarkup(a, b *telebot.ReplyMarkup) bool {

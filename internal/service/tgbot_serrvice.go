@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"strings"
 
@@ -101,24 +102,18 @@ func NewBotService(
 		MenuTest:          MenuTest,
 	}
 
-	// btnTestInfo := MenuInBot.Text("TestInfo")
-	// bs.Telebot.Handle(&btnTestInfo, func(c telebot.Context) error {
-	// 	return c.Reply("TestInfo", MenuTest)
-	// })
-
 	bs.Telebot.Handle(telebot.OnCallback, func(c telebot.Context) error {
 		data := c.Callback().Data
 
-		// Логируем "как есть"
 		bs.Logger.Info().
 			Str("raw_callback_data", fmt.Sprintf("%q", data)).
 			Bytes("raw_bytes", []byte(data)).
 			Msg("Received raw callback")
 
 		cleaned := strings.TrimLeftFunc(data, func(r rune) bool { return r < 32 })
-
 		bs.Logger.Debug().Str("cleaned_data", cleaned).Msg("Cleaned callback data")
 
+		// Обработка: get:{id}
 		if strings.HasPrefix(cleaned, "get:") {
 			idStr := strings.TrimPrefix(cleaned, "get:")
 			meetingID, err := uuid.Parse(idStr)
@@ -128,16 +123,25 @@ func NewBotService(
 					Text: "Ошибка: неверный идентификатор встречи.",
 				})
 			}
-
-			// Сохраняем ID встречи в контекст
 			c.Set("meeting_id", meetingID)
 			return bs.HandleGetByID(c)
 		}
 
+		// Обработка: page:N
 		if strings.HasPrefix(cleaned, "page:") {
+			var page int
+			_, err := fmt.Sscanf(cleaned, "page:%d", &page)
+			if err != nil {
+				return c.Respond()
+			}
+
+			// Подменяем args
+			c.Set("args", []string{strconv.Itoa(page)})
+
 			return bs.HandleList(c)
 		}
 
+		// Обработка: /start
 		if cleaned == "/start" {
 			return bs.HandleStart(c)
 		}
@@ -147,6 +151,13 @@ func NewBotService(
 	})
 
 	return bs
+}
+
+func (b *BotService) getArgs(c telebot.Context) []string {
+	if args, ok := c.Get("args").([]string); ok {
+		return args
+	}
+	return c.Args()
 }
 
 // getCtx безопасно извлекает контекст из telebot.Context или возвращает background

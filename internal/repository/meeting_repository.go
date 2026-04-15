@@ -95,6 +95,63 @@ func (r *MeetingRepository) UpdateStatusWithError(ctx context.Context, id uuid.U
 	return nil
 }
 
+type PaginationParams struct {
+	Limit  int
+	Offset int
+}
+
+type PaginatedResult[T any] struct {
+	Items []T
+	Total int
+}
+
+func (r *MeetingRepository) ListByUserWithPagination(ctx context.Context, userID int64, params PaginationParams) (*PaginatedResult[*models.Meeting], error) {
+	const countQuery = `
+        SELECT COUNT(*) FROM meetings WHERE user_id = $1
+    `
+	var total int
+	err := r.db.Conn.QueryRowContext(ctx, countQuery, userID).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count meetings: %w", err)
+	}
+
+	const query = `
+        SELECT id, user_id, title, status, created_at, audio_file_path
+        FROM meetings
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3
+    `
+
+	rows, err := r.db.Conn.QueryContext(ctx, query, userID, params.Limit, params.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query meetings: %w", err)
+	}
+	defer rows.Close()
+
+	var meetings []*models.Meeting
+	for rows.Next() {
+		var m models.Meeting
+		err := rows.Scan(
+			&m.ID,
+			&m.UserID,
+			&m.Title,
+			&m.Status,
+			&m.CreatedAt,
+			&m.AudioFilePath,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan meeting row: %w", err)
+		}
+		meetings = append(meetings, &m)
+	}
+
+	return &PaginatedResult[*models.Meeting]{
+		Items: meetings,
+		Total: total,
+	}, nil
+}
+
 // GetByUserAndID получает встречу по ID и пользователю, с транскрипцией и выжимкой
 func (r *MeetingRepository) GetByUserAndID(ctx context.Context, userID int64, meetingID uuid.UUID) (*models.Meeting, error) {
 	const query = `
