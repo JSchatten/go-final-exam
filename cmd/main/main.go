@@ -105,7 +105,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-quit
-		logger.Get().Info().Msgf("Received signal: %s. Shutting down...\n", sig)
+		logger.Get().Info().Msgf("Received signal: %s. Shutting down...", sig)
 		cancel()
 	}()
 
